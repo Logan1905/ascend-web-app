@@ -4,7 +4,7 @@ export default function NutritionPage() {
       <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
         Nutrition
       </h1>
-      <p className="mt-2 text-muted-foreground">Coming soon.</p>
+      <p className="text-muted-foreground mt-2">Coming soon.</p>
     </div>
   );
 }

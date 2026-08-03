@@ -3,12 +3,13 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, Bell, Dumbbell, Settings, LogOut, User } from "lucide-react";
+import { Menu, X, Dumbbell, Settings, LogOut, User } from "lucide-react";
 
 import { mainNavItems } from "@/config/navigation";
 import { siteConfig } from "@/config/site";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { NotificationDropdown } from "@/components/shared/notification-dropdown";
 
 export function MobileTopBar() {
   const pathname = usePathname();
@@ -28,7 +29,7 @@ export function MobileTopBar() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 flex h-14 w-full items-center justify-between border-b border-border bg-background px-4 md:hidden">
+      <header className="border-border bg-background sticky top-0 z-50 flex h-14 w-full items-center justify-between border-b px-4 md:hidden">
         {/* Left: Burger menu */}
         <Button
           variant="ghost"
@@ -42,7 +43,7 @@ export function MobileTopBar() {
 
         {/* Center: Logo placeholder */}
         <Link href="/" className="flex items-center gap-2">
-          <Dumbbell className="size-5 text-primary" />
+          <Dumbbell className="text-primary size-5" />
           <span className="text-lg font-bold tracking-tight">
             {siteConfig.name}
           </span>
@@ -50,9 +51,7 @@ export function MobileTopBar() {
 
         {/* Right: Notification + Profile */}
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" aria-label="Notifications">
-            <Bell className="size-5" />
-          </Button>
+          <NotificationDropdown />
           <Link href="/profile">
             <Button variant="ghost" size="icon" aria-label="Profile">
               <User className="size-5" />
@@ -66,13 +65,13 @@ export function MobileTopBar() {
         <div className="fixed inset-0 top-14 z-50 md:hidden">
           {/* Backdrop */}
           <div
-            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            className="bg-background/80 absolute inset-0 backdrop-blur-sm"
             onClick={() => setMenuOpen(false)}
             aria-hidden="true"
           />
 
           {/* Panel */}
-          <nav className="relative z-10 flex h-full w-full flex-col border-t border-border bg-background px-4 py-6 shadow-lg sm:max-w-sm">
+          <nav className="border-border bg-background relative z-10 flex h-full w-full flex-col border-t px-4 py-6 shadow-lg sm:max-w-sm">
             {/* Main nav links */}
             <div className="flex flex-col gap-1">
               {mainNavItems.map((item) => {
@@ -84,7 +83,7 @@ export function MobileTopBar() {
                     href={item.href}
                     onClick={() => setMenuOpen(false)}
                     className={cn(
-                      "flex items-center gap-3 rounded-md px-3 py-3 text-base font-medium transition-colors hover:bg-accent hover:text-accent-foreground",
+                      "hover:bg-accent hover:text-accent-foreground flex items-center gap-3 rounded-md px-3 py-3 text-base font-medium transition-colors",
                       isActive
                         ? "bg-accent text-accent-foreground"
                         : "text-muted-foreground",
@@ -98,7 +97,7 @@ export function MobileTopBar() {
             </div>
 
             {/* Divider */}
-            <div className="my-4 border-t border-border" />
+            <div className="border-border my-4 border-t" />
 
             {/* Settings & Logout */}
             <div className="flex flex-col gap-1">
@@ -106,7 +105,7 @@ export function MobileTopBar() {
                 href="/settings"
                 onClick={() => setMenuOpen(false)}
                 className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-3 text-base font-medium transition-colors hover:bg-accent hover:text-accent-foreground",
+                  "hover:bg-accent hover:text-accent-foreground flex items-center gap-3 rounded-md px-3 py-3 text-base font-medium transition-colors",
                   pathname === "/settings"
                     ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground",
@@ -120,7 +119,7 @@ export function MobileTopBar() {
                   setMenuOpen(false);
                   // TODO: handle logout when auth is implemented
                 }}
-                className="flex items-center gap-3 rounded-md px-3 py-3 text-base font-medium text-destructive transition-colors hover:bg-destructive/10"
+                className="text-destructive hover:bg-destructive/10 flex items-center gap-3 rounded-md px-3 py-3 text-base font-medium transition-colors"
               >
                 <LogOut className="size-5" />
                 Log out
