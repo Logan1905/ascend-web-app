@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Droplets, Flame, TrendingDown } from "lucide-react";
 import {
   AreaChart,
@@ -18,8 +19,11 @@ import {
 const userName = "Logan";
 const dailyCalorieGoal = 2200;
 const dailyCaloriesConsumed = 1845;
-const dailyWaterGoal = 8; // glasses
-const dailyWaterConsumed = 5;
+
+// Water data stored in liters internally
+const dailyWaterGoalL = 2.5; // liters
+const dailyWaterConsumedL = 1.5; // liters
+
 const userGoal: "loss" | "gain" = "loss";
 
 const weeklyCalories = [
@@ -45,6 +49,15 @@ const weightData = [
 
 // --- Helpers ---
 
+type WaterUnit = "L" | "fl oz";
+
+const LITERS_TO_FLOZ = 33.814;
+
+function convertWater(liters: number, unit: WaterUnit): number {
+  if (unit === "fl oz") return Math.round(liters * LITERS_TO_FLOZ);
+  return parseFloat(liters.toFixed(1));
+}
+
 function getGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return "Good morning";
@@ -57,12 +70,43 @@ function getCaloriePercentage(): number {
 }
 
 function getWaterPercentage(): number {
-  return Math.round((dailyWaterConsumed / dailyWaterGoal) * 100);
+  return Math.round((dailyWaterConsumedL / dailyWaterGoalL) * 100);
+}
+
+// --- Custom Tooltip ---
+
+interface TooltipPayload {
+  value: number;
+  name: string;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: TooltipPayload[];
+  label?: string;
+  unit?: string;
+}
+
+function CustomTooltip({ active, payload, label, unit }: CustomTooltipProps) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="border-border bg-popover rounded-lg border px-3 py-2 text-sm shadow-md">
+      <p className="font-medium">{label}</p>
+      <p className="text-muted-foreground">
+        {payload[0].value.toLocaleString()} {unit ?? ""}
+      </p>
+    </div>
+  );
 }
 
 // --- Component ---
 
 export default function Home() {
+  const [waterUnit, setWaterUnit] = useState<WaterUnit>("L");
+
+  const waterConsumed = convertWater(dailyWaterConsumedL, waterUnit);
+  const waterGoal = convertWater(dailyWaterGoalL, waterUnit);
+
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-6">
       {/* Greeting */}
@@ -93,7 +137,6 @@ export default function Home() {
               </p>
             </div>
           </div>
-          {/* Progress bar */}
           <div className="bg-muted mt-4 h-2 w-full overflow-hidden rounded-full">
             <div
               className="h-full rounded-full bg-orange-500 transition-all"
@@ -107,21 +150,45 @@ export default function Home() {
 
         {/* Water Card */}
         <div className="border-border bg-card rounded-xl border p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30">
-              <Droplets className="size-5 text-blue-500" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                <Droplets className="size-5 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-muted-foreground text-sm">Water Intake</p>
+                <p className="text-xl font-bold">
+                  {waterConsumed}{" "}
+                  <span className="text-muted-foreground text-sm font-normal">
+                    / {waterGoal} {waterUnit}
+                  </span>
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-muted-foreground text-sm">Water Intake</p>
-              <p className="text-xl font-bold">
-                {dailyWaterConsumed}{" "}
-                <span className="text-muted-foreground text-sm font-normal">
-                  / {dailyWaterGoal} glasses
-                </span>
-              </p>
+            {/* Unit toggle */}
+            <div className="border-border flex overflow-hidden rounded-lg border text-xs font-medium">
+              <button
+                onClick={() => setWaterUnit("L")}
+                className={`px-2.5 py-1.5 transition-colors ${
+                  waterUnit === "L"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                L
+              </button>
+              <button
+                onClick={() => setWaterUnit("fl oz")}
+                className={`px-2.5 py-1.5 transition-colors ${
+                  waterUnit === "fl oz"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                fl oz
+              </button>
             </div>
           </div>
-          {/* Progress bar */}
           <div className="bg-muted mt-4 h-2 w-full overflow-hidden rounded-full">
             <div
               className="h-full rounded-full bg-blue-500 transition-all"
@@ -152,14 +219,7 @@ export default function Home() {
                 tick={{ fontSize: 12 }}
                 className="fill-muted-foreground"
               />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--popover))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "0.5rem",
-                  fontSize: "0.875rem",
-                }}
-              />
+              <Tooltip content={<CustomTooltip unit="kcal" />} cursor={false} />
               <Bar dataKey="calories" fill="#f97316" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -188,14 +248,7 @@ export default function Home() {
                 tick={{ fontSize: 12 }}
                 className="fill-muted-foreground"
               />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--popover))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "0.5rem",
-                  fontSize: "0.875rem",
-                }}
-              />
+              <Tooltip content={<CustomTooltip unit="lbs" />} cursor={false} />
               <Area
                 type="monotone"
                 dataKey="weight"
