@@ -1,13 +1,25 @@
+import {
+  Home,
+  Dumbbell,
+  UtensilsCrossed,
+  TrendingUp,
+  BookOpen,
+  type LucideIcon,
+} from "lucide-react";
+
 /**
- * Main navigation items used in the header.
- * Links are defined here so they can be reused across desktop and mobile nav.
+ * Main navigation items used in the header and bottom tab bar.
  */
 export const mainNavItems = [
-  { label: "Dashboard", href: "/" },
-  { label: "Workouts", href: "/workouts" },
-  { label: "Nutrition", href: "/nutrition" },
-  { label: "Progress", href: "/progress" },
-  { label: "Journal", href: "/journal" },
-] as const;
+  { label: "Home", href: "/", icon: Home },
+  { label: "Workouts", href: "/workouts", icon: Dumbbell },
+  { label: "Nutrition", href: "/nutrition", icon: UtensilsCrossed },
+  { label: "Progress", href: "/progress", icon: TrendingUp },
+  { label: "Journal", href: "/journal", icon: BookOpen },
+] as const satisfies readonly NavItem[];
 
-export type NavItem = (typeof mainNavItems)[number];
+export interface NavItem {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+}

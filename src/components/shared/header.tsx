@@ -7,13 +7,15 @@ import { Dumbbell } from "lucide-react";
 import { siteConfig } from "@/config/site";
 import { mainNavItems } from "@/config/navigation";
 import { cn } from "@/lib/utils";
-import { MobileNav } from "@/components/shared/mobile-nav";
 
+/**
+ * Desktop header — hidden on mobile (mobile uses MobileTopBar + MobileBottomNav).
+ */
 export function Header() {
   const pathname = usePathname();
 
   return (
-    <header className="border-border bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50 w-full border-b backdrop-blur">
+    <header className="border-border bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50 hidden w-full border-b backdrop-blur md:block">
       <div className="mx-auto flex h-14 w-full max-w-7xl items-center px-4 sm:px-6 lg:px-8">
         {/* Logo / Brand */}
         <Link href="/" className="mr-6 flex items-center gap-2">
@@ -24,7 +26,7 @@ export function Header() {
         </Link>
 
         {/* Desktop Navigation */}
-        <nav className="hidden md:flex md:flex-1 md:items-center md:gap-1">
+        <nav className="flex flex-1 items-center gap-1">
           {mainNavItems.map((item) => {
             const isActive = pathname === item.href;
             return (
@@ -43,11 +45,6 @@ export function Header() {
             );
           })}
         </nav>
-
-        {/* Mobile Navigation Toggle */}
-        <div className="flex flex-1 justify-end md:hidden">
-          <MobileNav pathname={pathname} />
-        </div>
       </div>
     </header>
   );
