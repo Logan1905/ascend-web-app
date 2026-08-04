@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, Check, Moon, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Check, Moon, Trash2, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/providers/auth-provider";
@@ -194,6 +194,14 @@ export default function RoutinesPage() {
                     Active
                   </span>
                 )}
+
+                <Link
+                  href={`/workouts/routines/edit?id=${routine.id}`}
+                  className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-md p-1.5 transition-colors"
+                  aria-label={`Edit ${routine.name}`}
+                >
+                  <Pencil className="size-4" />
+                </Link>
 
                 <button
                   onClick={() => handleDelete(routine)}

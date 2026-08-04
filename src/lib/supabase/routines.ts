@@ -136,6 +136,24 @@ export async function fetchActiveRoutine(): Promise<Routine | null> {
   return mapRoutine(data as RoutineRow);
 }
 
+/** Fetches a single routine by its ID. */
+export async function fetchRoutineById(
+  routineId: string,
+): Promise<Routine | null> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("routines")
+    .select(ROUTINE_SELECT)
+    .eq("id", routineId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  return mapRoutine(data as RoutineRow);
+}
+
 // --- Mutations ---
 
 /**
