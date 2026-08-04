@@ -41,6 +41,7 @@ export default function ProfilePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    window.alert(`Form submitted! Mode: ${mode}, Email: ${email}`);
     setError(null);
 
     // Basic validation
@@ -67,7 +68,12 @@ export default function ProfilePage() {
     try {
       if (mode === "login") {
         const { error } = await signIn(email, password);
-        if (error) setError(`Sign in failed: ${error}`);
+        if (error) {
+          setError(`Sign in failed: ${error}`);
+          window.alert(`Sign in failed: ${error}`);
+        } else {
+          window.alert("Sign in successful!");
+        }
       } else {
         const { error, needsConfirmation } = await signUp(
           email,
@@ -76,17 +82,20 @@ export default function ProfilePage() {
         );
         if (error) {
           setError(`Sign up failed: ${error}`);
+          window.alert(`Sign up failed: ${error}`);
         } else if (needsConfirmation) {
           setConfirmationSent(true);
+          window.alert("Success! Check your email to confirm your account.");
         } else {
-          // Signed up and auto-confirmed (no email confirmation required)
           setError(null);
+          window.alert("Account created and signed in!");
         }
       }
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "An unexpected error occurred";
       setError(`Unexpected error: ${message}`);
+      window.alert(`Unexpected error: ${message}`);
     } finally {
       setSubmitting(false);
     }
@@ -294,13 +303,74 @@ export default function ProfilePage() {
           )}
 
           {/* Submit */}
-          <Button className="w-full" size="lg" disabled={submitting}>
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={async () => {
+              // Validation
+              if (!email || !password) {
+                window.alert("Please fill in all required fields.");
+                return;
+              }
+              if (mode === "register") {
+                if (!fullName.trim()) {
+                  window.alert("Please enter your name.");
+                  return;
+                }
+                if (password.length < 6) {
+                  window.alert("Password must be at least 6 characters.");
+                  return;
+                }
+                if (password !== confirmPassword) {
+                  window.alert("Passwords do not match.");
+                  return;
+                }
+              }
+
+              setSubmitting(true);
+              try {
+                if (mode === "login") {
+                  const { error } = await signIn(email, password);
+                  if (error) {
+                    window.alert(`Sign in failed: ${error}`);
+                    setError(`Sign in failed: ${error}`);
+                  } else {
+                    window.alert("Sign in successful!");
+                  }
+                } else {
+                  const { error, needsConfirmation } = await signUp(
+                    email,
+                    password,
+                    fullName.trim(),
+                  );
+                  if (error) {
+                    window.alert(`Sign up failed: ${error}`);
+                    setError(`Sign up failed: ${error}`);
+                  } else if (needsConfirmation) {
+                    window.alert(
+                      "Success! Check your email to confirm your account.",
+                    );
+                    setConfirmationSent(true);
+                  } else {
+                    window.alert("Account created and signed in!");
+                  }
+                }
+              } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : String(err);
+                window.alert(`Unexpected error: ${msg}`);
+                setError(`Unexpected error: ${msg}`);
+              } finally {
+                setSubmitting(false);
+              }
+            }}
+            className="bg-primary text-primary-foreground hover:bg-primary/80 h-9 w-full rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+          >
             {submitting
               ? "Please wait…"
               : mode === "login"
                 ? "Sign In"
                 : "Create Account"}
-          </Button>
+          </button>
         </form>
 
         {/* Toggle mode */}
