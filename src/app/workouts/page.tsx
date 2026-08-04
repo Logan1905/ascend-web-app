@@ -1,28 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Clock, StickyNote, CalendarDays } from "lucide-react";
+import { Clock, StickyNote, CalendarDays, Moon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-
-// --- Static data ---
-
-const userName = "Logan";
-const todaysRoutine = "Push";
-const restTime = "3 min";
-
-const exercises = [
-  { name: "Flat Barbell Bench Press", sets: 4, reps: "8-10" },
-  { name: "Incline Dumbbell Press", sets: 3, reps: "10-12" },
-  { name: "Cable Flyes", sets: 3, reps: "12-15" },
-  { name: "Overhead Press", sets: 4, reps: "8-10" },
-  { name: "Lateral Raises", sets: 3, reps: "12-15" },
-  { name: "Tricep Pushdowns", sets: 3, reps: "10-12" },
-  { name: "Overhead Tricep Extension", sets: 3, reps: "10-12" },
-];
-
-// --- Helpers ---
+import { useAuth } from "@/components/providers/auth-provider";
+import { fetchActiveRoutine } from "@/lib/supabase/routines";
+import {
+  DAYS_OF_WEEK,
+  getTodayDayOfWeek,
+  type Routine,
+  type RoutineDay,
+} from "@/types/routine";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -31,18 +21,58 @@ function getGreeting(): string {
   return "Good evening";
 }
 
-// --- Component ---
-
 export default function WorkoutsPage() {
+  const { user, loading: authLoading } = useAuth();
+
+  const [routine, setRoutine] = useState<Routine | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    if (authLoading || !user) return;
+
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const active = await fetchActiveRoutine();
+        if (!cancelled) setRoutine(active);
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err.message : "Failed to load your routine.",
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
+
+  const firstName =
+    (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ??
+    "there";
+
+  const todayDayOfWeek = getTodayDayOfWeek();
+  const todayName = DAYS_OF_WEEK.find((d) => d.value === todayDayOfWeek)!.label;
+  const today: RoutineDay | undefined = routine?.days.find(
+    (d) => d.dayOfWeek === todayDayOfWeek,
+  );
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-6">
-      {/* Greeting + Routine button */}
+      {/* Greeting + Routines button */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            {getGreeting()}, {userName}
+            {getGreeting()}
+            {user ? `, ${firstName}` : ""}
           </h1>
           <p className="text-muted-foreground mt-1">Today&apos;s workout:</p>
         </div>
@@ -54,68 +84,128 @@ export default function WorkoutsPage() {
         </Link>
       </div>
 
-      {/* Workout Table */}
-      <div className="border-border bg-card rounded-xl border">
-        {/* Table header with routine name and rest time */}
-        <div className="border-border flex items-center justify-between border-b px-5 py-4">
-          <h2 className="text-lg font-semibold">{todaysRoutine}</h2>
-          <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
-            <Clock className="size-4" />
-            <span>Rest: {restTime}</span>
+      {error && (
+        <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border px-4 py-3 text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* Not signed in */}
+      {!authLoading && !user && (
+        <div className="border-border flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed py-16 text-center">
+          <p className="text-muted-foreground">
+            Sign in to see your workout for today.
+          </p>
+          <Link href="/profile">
+            <Button size="sm">Go to Sign In</Button>
+          </Link>
+        </div>
+      )}
+
+      {/* Loading */}
+      {(authLoading || (user && loading)) && (
+        <p className="text-muted-foreground text-sm">Loading your workout…</p>
+      )}
+
+      {/* No active routine */}
+      {user && !loading && !routine && !error && (
+        <div className="border-border flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed py-16 text-center">
+          <p className="text-muted-foreground">
+            No active routine yet. Create one to see your daily workout.
+          </p>
+          <Link href="/workouts/routines/new">
+            <Button size="sm">Create a Routine</Button>
+          </Link>
+        </div>
+      )}
+
+      {/* Rest day */}
+      {user && !loading && routine && today?.isRestDay && (
+        <div className="border-border bg-card flex flex-col items-center justify-center gap-2 rounded-xl border py-16 text-center">
+          <Moon className="text-muted-foreground size-8" />
+          <p className="text-lg font-semibold">Rest Day</p>
+          <p className="text-muted-foreground text-sm">
+            Enjoy your recovery — {todayName} is a rest day.
+          </p>
+        </div>
+      )}
+
+      {/* Workout table */}
+      {user && !loading && routine && today && !today.isRestDay && (
+        <div className="border-border bg-card rounded-xl border">
+          <div className="border-border flex items-center justify-between border-b px-5 py-4">
+            <h2 className="text-lg font-semibold">
+              {today.label || todayName}
+            </h2>
+            <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
+              <Clock className="size-4" />
+              <span>Rest: {today.restMinutes} min</span>
+            </div>
           </div>
-        </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-border bg-muted/50 border-b">
-                <th className="text-muted-foreground px-5 py-3 text-left font-medium">
-                  Exercise
-                </th>
-                <th className="text-muted-foreground px-5 py-3 text-center font-medium">
-                  Sets
-                </th>
-                <th className="text-muted-foreground px-5 py-3 text-center font-medium">
-                  Reps
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {exercises.map((exercise, index) => (
-                <tr
-                  key={exercise.name}
-                  className={
-                    index < exercises.length - 1 ? "border-border border-b" : ""
-                  }
-                >
-                  <td className="px-5 py-3.5 font-medium">{exercise.name}</td>
-                  <td className="text-muted-foreground px-5 py-3.5 text-center">
-                    {exercise.sets}
-                  </td>
-                  <td className="text-muted-foreground px-5 py-3.5 text-center">
-                    {exercise.reps}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {today.exercises.length === 0 ? (
+            <p className="text-muted-foreground px-5 py-8 text-center text-sm">
+              No exercises set for {todayName} yet.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-border bg-muted/50 border-b">
+                    <th className="text-muted-foreground px-5 py-3 text-left font-medium">
+                      Exercise
+                    </th>
+                    <th className="text-muted-foreground px-5 py-3 text-center font-medium">
+                      Sets
+                    </th>
+                    <th className="text-muted-foreground px-5 py-3 text-center font-medium">
+                      Reps
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {today.exercises.map((exercise, index) => (
+                    <tr
+                      key={exercise.id}
+                      className={
+                        index < today.exercises.length - 1
+                          ? "border-border border-b"
+                          : ""
+                      }
+                    >
+                      <td className="px-5 py-3.5 font-medium">
+                        {exercise.name}
+                      </td>
+                      <td className="text-muted-foreground px-5 py-3.5 text-center">
+                        {exercise.sets}
+                      </td>
+                      <td className="text-muted-foreground px-5 py-3.5 text-center">
+                        {exercise.reps}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
-      {/* Workout Notes */}
-      <div className="border-border bg-card rounded-xl border p-5">
-        <div className="mb-3 flex items-center gap-2">
-          <StickyNote className="text-muted-foreground size-5" />
-          <h2 className="text-base font-semibold">Workout Notes</h2>
+      {/* Workout Notes (still local — saved to the database in a later step) */}
+      {user && !loading && routine && !today?.isRestDay && (
+        <div className="border-border bg-card rounded-xl border p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <StickyNote className="text-muted-foreground size-5" />
+            <h2 className="text-base font-semibold">Workout Notes</h2>
+          </div>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="How did the workout feel? Any PRs? Adjustments for next time..."
+            className="border-input bg-background placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20 min-h-[120px] w-full resize-y rounded-lg border px-4 py-3 text-sm transition-colors outline-none focus:ring-2"
+          />
         </div>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="How did the workout feel? Any PRs? Adjustments for next time..."
-          className="border-input bg-background placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20 min-h-[120px] w-full resize-y rounded-lg border px-4 py-3 text-sm transition-colors outline-none focus:ring-2"
-        />
-      </div>
+      )}
     </div>
   );
 }
