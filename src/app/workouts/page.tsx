@@ -6,7 +6,7 @@ import { Clock, StickyNote, CalendarDays, Moon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/providers/auth-provider";
-import { fetchActiveRoutine } from "@/lib/supabase/routines";
+import { fetchActiveRoutine, fetchRoutines } from "@/lib/supabase/routines";
 import {
   DAYS_OF_WEEK,
   getTodayDayOfWeek,
@@ -25,6 +25,7 @@ export default function WorkoutsPage() {
   const { user, loading: authLoading } = useAuth();
 
   const [routine, setRoutine] = useState<Routine | null>(null);
+  const [hasRoutines, setHasRoutines] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
@@ -37,8 +38,14 @@ export default function WorkoutsPage() {
       setLoading(true);
       setError(null);
       try {
-        const active = await fetchActiveRoutine();
-        if (!cancelled) setRoutine(active);
+        const [active, allRoutines] = await Promise.all([
+          fetchActiveRoutine(),
+          fetchRoutines(),
+        ]);
+        if (!cancelled) {
+          setRoutine(active);
+          setHasRoutines(allRoutines.length > 0);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -110,12 +117,26 @@ export default function WorkoutsPage() {
       {/* No active routine */}
       {user && !loading && !routine && !error && (
         <div className="border-border flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed py-16 text-center">
-          <p className="text-muted-foreground">
-            No active routine yet. Create one to see your daily workout.
-          </p>
-          <Link href="/workouts/routines/new">
-            <Button size="sm">Create a Routine</Button>
-          </Link>
+          {hasRoutines ? (
+            <>
+              <p className="text-muted-foreground">
+                No routine is currently active. Select one from your routines or
+                create a new one.
+              </p>
+              <Link href="/workouts/routines">
+                <Button size="sm">Go to My Routines</Button>
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="text-muted-foreground">
+                No routines yet. Create one to see your daily workout.
+              </p>
+              <Link href="/workouts/routines/new">
+                <Button size="sm">Create a Routine</Button>
+              </Link>
+            </>
+          )}
         </div>
       )}
 
