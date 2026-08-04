@@ -10,9 +10,11 @@ import { siteConfig } from "@/config/site";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { NotificationDropdown } from "@/components/shared/notification-dropdown";
+import { useAuth } from "@/components/providers/auth-provider";
 
 export function MobileTopBar() {
   const pathname = usePathname();
+  const { user, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Prevent body scroll when menu is open
@@ -114,16 +116,18 @@ export function MobileTopBar() {
                 <Settings className="size-5" />
                 Settings
               </Link>
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  // TODO: handle logout when auth is implemented
-                }}
-                className="text-destructive hover:bg-destructive/10 flex items-center gap-3 rounded-md px-3 py-3 text-base font-medium transition-colors"
-              >
-                <LogOut className="size-5" />
-                Log out
-              </button>
+              {user && (
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    signOut();
+                  }}
+                  className="text-destructive hover:bg-destructive/10 flex items-center gap-3 rounded-md px-3 py-3 text-base font-medium transition-colors"
+                >
+                  <LogOut className="size-5" />
+                  Log out
+                </button>
+              )}
             </div>
           </nav>
         </div>
