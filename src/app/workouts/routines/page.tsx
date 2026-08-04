@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Plus,
@@ -158,6 +159,7 @@ function SortableRoutineCard({
 // --- Main page ---
 
 export default function RoutinesPage() {
+  const router = useRouter();
   const { user, loading: authLoading } = useAuth();
 
   const [routines, setRoutines] = useState<Routine[]>([]);
@@ -264,18 +266,41 @@ export default function RoutinesPage() {
     });
   }
 
+  async function handleBack() {
+    if (!hasUnsavedChange) {
+      router.push("/workouts");
+      return;
+    }
+
+    const selectedName =
+      routines.find((r) => r.id === pendingActiveId)?.name ??
+      "the selected routine";
+
+    const save = window.confirm(
+      `You selected "${selectedName}" but haven't saved yet.\n\nPress OK to save and go back, or Cancel to discard your selection.`,
+    );
+
+    if (save) {
+      await handleSave();
+      router.push("/workouts");
+    } else {
+      setPendingActiveId(null);
+      router.push("/workouts");
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-6">
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Link
-            href="/workouts"
+          <button
+            onClick={handleBack}
             className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-md p-1.5 transition-colors"
             aria-label="Back to workouts"
           >
             <ArrowLeft className="size-5" />
-          </Link>
+          </button>
           <h1 className="text-2xl font-bold tracking-tight">My Routines</h1>
         </div>
 
