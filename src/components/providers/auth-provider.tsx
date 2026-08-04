@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import type { Session, User } from "@supabase/supabase-js";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import type { SupabaseClient, Session, User } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/client";
 
@@ -24,13 +24,22 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Create the browser client once for the lifetime of the provider.
-  const supabase = useMemo(() => createClient(), []);
+  const supabaseRef = useRef<SupabaseClient | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Lazily get or create the Supabase client (only in the browser).
+  function getSupabase(): SupabaseClient {
+    if (!supabaseRef.current) {
+      supabaseRef.current = createClient();
+    }
+    return supabaseRef.current;
+  }
+
   useEffect(() => {
+    const supabase = getSupabase();
+
     // Load any existing session on mount.
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
@@ -47,43 +56,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, [supabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const value = useMemo<AuthContextValue>(
-    () => ({
-      user,
-      session,
-      loading,
-      async signIn(email, password) {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        return { error: error?.message ?? null };
+  async function signIn(email: string, password: string) {
+    const { error } = await getSupabase().auth.signInWithPassword({
+      email,
+      password,
+    });
+    return { error: error?.message ?? null };
+  }
+
+  async function signUp(email: string, password: string, fullName: string) {
+    const { data, error } = await getSupabase().auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName },
       },
-      async signUp(email, password, fullName) {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { full_name: fullName },
-          },
-        });
-        if (error) {
-          return { error: error.message, needsConfirmation: false };
-        }
-        // When email confirmation is enabled, there is a user but no session.
-        const needsConfirmation = !data.session && !!data.user;
-        return { error: null, needsConfirmation };
-      },
-      async signOut() {
-        await supabase.auth.signOut();
-      },
-    }),
-    [user, session, loading, supabase],
+    });
+    if (error) {
+      return { error: error.message, needsConfirmation: false };
+    }
+    const needsConfirmation = !data.session && !!data.user;
+    return { error: null, needsConfirmation };
+  }
+
+  async function handleSignOut() {
+    await getSupabase().auth.signOut();
+  }
+
+  return (
+    <AuthContext
+      value={{
+        user,
+        session,
+        loading,
+        signIn,
+        signUp,
+        signOut: handleSignOut,
+      }}
+    >
+      {children}
+    </AuthContext>
   );
-
-  return <AuthContext value={value}>{children}</AuthContext>;
 }
 
 export function useAuth() {

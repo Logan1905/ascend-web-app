@@ -67,7 +67,7 @@ export default function ProfilePage() {
     try {
       if (mode === "login") {
         const { error } = await signIn(email, password);
-        if (error) setError(error);
+        if (error) setError(`Sign in failed: ${error}`);
       } else {
         const { error, needsConfirmation } = await signUp(
           email,
@@ -75,11 +75,18 @@ export default function ProfilePage() {
           fullName.trim(),
         );
         if (error) {
-          setError(error);
+          setError(`Sign up failed: ${error}`);
         } else if (needsConfirmation) {
           setConfirmationSent(true);
+        } else {
+          // Signed up and auto-confirmed (no email confirmation required)
+          setError(null);
         }
       }
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred";
+      setError(`Unexpected error: ${message}`);
     } finally {
       setSubmitting(false);
     }
@@ -325,6 +332,11 @@ export default function ProfilePage() {
               </button>
             </>
           )}
+        </p>
+
+        {/* Debug info — remove after confirming auth works */}
+        <p className="text-muted-foreground/50 text-center text-[10px] break-all">
+          Supabase: {process.env.NEXT_PUBLIC_SUPABASE_URL ?? "NOT SET"}
         </p>
       </div>
     </div>
