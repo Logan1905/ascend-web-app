@@ -46,10 +46,10 @@ export default function WorkoutsPage() {
           </h1>
           <p className="text-muted-foreground mt-1">Today&apos;s workout:</p>
         </div>
-        <Link href="/workouts/routine">
+        <Link href="/workouts/routines">
           <Button variant="outline" size="sm" className="shrink-0 gap-1.5">
             <CalendarDays className="size-4" />
-            My Routine
+            My Routines
           </Button>
         </Link>
       </div>
