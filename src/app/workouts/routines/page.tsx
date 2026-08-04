@@ -1,8 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, Check, Moon, Trash2, Pencil } from "lucide-react";
+import {
+  ArrowLeft,
+  Plus,
+  Check,
+  Moon,
+  Trash2,
+  Pencil,
+  GripVertical,
+} from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/providers/auth-provider";
@@ -13,6 +37,126 @@ import {
 } from "@/lib/supabase/routines";
 import { DAYS_OF_WEEK, type Routine } from "@/types/routine";
 
+// --- Sortable routine card ---
+
+interface SortableRoutineCardProps {
+  routine: Routine;
+  pendingActiveId: string | null;
+  busyId: string | null;
+  onSelect: (id: string) => void;
+  onDelete: (routine: Routine) => void;
+}
+
+function SortableRoutineCard({
+  routine,
+  pendingActiveId,
+  busyId,
+  onSelect,
+  onDelete,
+}: SortableRoutineCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: routine.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const isSelected =
+    pendingActiveId === routine.id ||
+    (pendingActiveId === null && routine.isActive);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`bg-card rounded-xl border p-4 transition-colors ${
+        isSelected ? "border-primary" : "border-border"
+      }`}
+    >
+      <div className="mb-3 flex items-center gap-2">
+        {/* Drag handle */}
+        <button
+          {...attributes}
+          {...listeners}
+          className="text-muted-foreground hover:bg-accent hover:text-foreground cursor-grab touch-none rounded-md p-1 active:cursor-grabbing"
+          aria-label="Drag to reorder"
+        >
+          <GripVertical className="size-4" />
+        </button>
+
+        {/* Active toggle */}
+        <button
+          onClick={() => onSelect(routine.id)}
+          disabled={busyId === routine.id}
+          className={`flex size-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${
+            isSelected
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-muted-foreground/40 hover:border-primary"
+          }`}
+          aria-label={
+            isSelected ? "Selected routine" : `Select ${routine.name}`
+          }
+        >
+          {isSelected && <Check className="size-4" />}
+        </button>
+
+        <h2 className="flex-1 text-base font-semibold">{routine.name}</h2>
+
+        <Link
+          href={`/workouts/routines/edit?id=${routine.id}`}
+          className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-md p-1.5 transition-colors"
+          aria-label={`Edit ${routine.name}`}
+        >
+          <Pencil className="size-4" />
+        </Link>
+
+        <button
+          onClick={() => onDelete(routine)}
+          disabled={busyId === routine.id}
+          className="text-destructive hover:bg-destructive/10 rounded-md p-1.5 transition-colors disabled:opacity-50"
+          aria-label={`Delete ${routine.name}`}
+        >
+          <Trash2 className="size-4" />
+        </button>
+      </div>
+
+      {/* Week grid */}
+      <div className="grid grid-cols-7 gap-1.5">
+        {DAYS_OF_WEEK.map(({ value, short }) => {
+          const day = routine.days.find((d) => d.dayOfWeek === value);
+          return (
+            <div
+              key={value}
+              className="bg-muted/50 flex flex-col items-center rounded-lg px-1 py-2"
+            >
+              <span className="text-muted-foreground text-[10px] font-medium uppercase sm:text-xs">
+                {short}
+              </span>
+              {day?.isRestDay ? (
+                <Moon className="text-muted-foreground mt-1 size-3.5 sm:size-4" />
+              ) : (
+                <span className="mt-1 text-center text-[10px] leading-tight font-medium sm:text-xs">
+                  {day?.label || "—"}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// --- Main page ---
+
 export default function RoutinesPage() {
   const { user, loading: authLoading } = useAuth();
 
@@ -21,17 +165,20 @@ export default function RoutinesPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const loadRoutines = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setRoutines(await fetchRoutines());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load routines.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Track if user selected a different routine than the currently active one
+  const [pendingActiveId, setPendingActiveId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const currentActiveId = routines.find((r) => r.isActive)?.id ?? null;
+  const hasUnsavedChange =
+    pendingActiveId !== null && pendingActiveId !== currentActiveId;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 5 },
+    }),
+  );
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -59,20 +206,31 @@ export default function RoutinesPage() {
     };
   }, [authLoading, user]);
 
-  async function handleSetActive(routineId: string) {
-    setBusyId(routineId);
+  function handleSelect(routineId: string) {
+    if (routineId === currentActiveId) {
+      // Deselect pending change — go back to current active
+      setPendingActiveId(null);
+    } else {
+      setPendingActiveId(routineId);
+    }
+  }
+
+  async function handleSave() {
+    if (!pendingActiveId) return;
+    setSaving(true);
     setError(null);
     try {
-      await setActiveRoutine(routineId);
+      await setActiveRoutine(pendingActiveId);
       setRoutines((prev) =>
-        prev.map((r) => ({ ...r, isActive: r.id === routineId })),
+        prev.map((r) => ({ ...r, isActive: r.id === pendingActiveId })),
       );
+      setPendingActiveId(null);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not change the routine.",
       );
     } finally {
-      setBusyId(null);
+      setSaving(false);
     }
   }
 
@@ -84,7 +242,8 @@ export default function RoutinesPage() {
     setError(null);
     try {
       await deleteRoutine(routine.id);
-      await loadRoutines();
+      if (pendingActiveId === routine.id) setPendingActiveId(null);
+      setRoutines((prev) => prev.filter((r) => r.id !== routine.id));
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not delete the routine.",
@@ -92,6 +251,17 @@ export default function RoutinesPage() {
     } finally {
       setBusyId(null);
     }
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setRoutines((prev) => {
+      const oldIndex = prev.findIndex((r) => r.id === active.id);
+      const newIndex = prev.findIndex((r) => r.id === over.id);
+      return arrayMove(prev, oldIndex, newIndex);
+    });
   }
 
   return (
@@ -108,14 +278,34 @@ export default function RoutinesPage() {
           </Link>
           <h1 className="text-2xl font-bold tracking-tight">My Routines</h1>
         </div>
-        {user && (
-          <Link href="/workouts/routines/new">
-            <Button size="sm" className="shrink-0 gap-1.5">
-              <Plus className="size-4" />
-              Add Routine
+
+        <div className="flex items-center gap-2">
+          {/* Save button — only visible when a new selection is made */}
+          {hasUnsavedChange && (
+            <Button
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={handleSave}
+              disabled={saving}
+            >
+              <Check className="size-4" />
+              {saving ? "Saving…" : "Save"}
             </Button>
-          </Link>
-        )}
+          )}
+
+          {user && (
+            <Link href="/workouts/routines/new">
+              <Button
+                size="sm"
+                variant={hasUnsavedChange ? "outline" : "default"}
+                className="shrink-0 gap-1.5"
+              >
+                <Plus className="size-4" />
+                Add Routine
+              </Button>
+            </Link>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -156,89 +346,31 @@ export default function RoutinesPage() {
         </div>
       )}
 
-      {/* Routines list */}
+      {/* Routines list with drag-and-drop */}
       {user && !loading && routines.length > 0 && (
-        <div className="space-y-4">
-          {routines.map((routine) => (
-            <div
-              key={routine.id}
-              className={`bg-card rounded-xl border p-4 transition-colors ${
-                routine.isActive ? "border-primary" : "border-border"
-              }`}
-            >
-              {/* Top row: active toggle + name + delete */}
-              <div className="mb-3 flex items-center gap-3">
-                <button
-                  onClick={() => handleSetActive(routine.id)}
-                  disabled={routine.isActive || busyId === routine.id}
-                  className={`flex size-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${
-                    routine.isActive
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-muted-foreground/40 hover:border-primary"
-                  }`}
-                  aria-label={
-                    routine.isActive
-                      ? "Currently active routine"
-                      : `Set ${routine.name} as active`
-                  }
-                >
-                  {routine.isActive && <Check className="size-4" />}
-                </button>
-
-                <h2 className="flex-1 text-base font-semibold">
-                  {routine.name}
-                </h2>
-
-                {routine.isActive && (
-                  <span className="text-primary text-xs font-medium">
-                    Active
-                  </span>
-                )}
-
-                <Link
-                  href={`/workouts/routines/edit?id=${routine.id}`}
-                  className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-md p-1.5 transition-colors"
-                  aria-label={`Edit ${routine.name}`}
-                >
-                  <Pencil className="size-4" />
-                </Link>
-
-                <button
-                  onClick={() => handleDelete(routine)}
-                  disabled={busyId === routine.id}
-                  className="text-destructive hover:bg-destructive/10 rounded-md p-1.5 transition-colors disabled:opacity-50"
-                  aria-label={`Delete ${routine.name}`}
-                >
-                  <Trash2 className="size-4" />
-                </button>
-              </div>
-
-              {/* Week grid */}
-              <div className="grid grid-cols-7 gap-1.5">
-                {DAYS_OF_WEEK.map(({ value, short }) => {
-                  const day = routine.days.find((d) => d.dayOfWeek === value);
-                  return (
-                    <div
-                      key={value}
-                      className="bg-muted/50 flex flex-col items-center rounded-lg px-1 py-2"
-                    >
-                      <span className="text-muted-foreground text-[10px] font-medium uppercase sm:text-xs">
-                        {short}
-                      </span>
-                      {day?.isRestDay ? (
-                        <Moon className="text-muted-foreground mt-1 size-3.5 sm:size-4" />
-                      ) : (
-                        <span className="mt-1 text-center text-[10px] leading-tight font-medium sm:text-xs">
-                          {day?.label || "—"}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={routines.map((r) => r.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-4">
+              {routines.map((routine) => (
+                <SortableRoutineCard
+                  key={routine.id}
+                  routine={routine}
+                  pendingActiveId={pendingActiveId}
+                  busyId={busyId}
+                  onSelect={handleSelect}
+                  onDelete={handleDelete}
+                />
+              ))}
             </div>
-          ))}
-        </div>
+          </SortableContext>
+        </DndContext>
       )}
     </div>
   );
