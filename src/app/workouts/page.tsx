@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, StickyNote } from "lucide-react";
+import Link from "next/link";
+import { Clock, StickyNote, CalendarDays } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 
 // --- Static data ---
 
@@ -35,18 +38,20 @@ export default function WorkoutsPage() {
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-6">
-      {/* Greeting */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-          {getGreeting()}, {userName}
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Today&apos;s workout is{" "}
-          <span className="text-foreground font-semibold">
-            &ldquo;{todaysRoutine}&rdquo;
-          </span>
-          .
-        </p>
+      {/* Greeting + Routine button */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            {getGreeting()}, {userName}
+          </h1>
+          <p className="text-muted-foreground mt-1">Today&apos;s workout:</p>
+        </div>
+        <Link href="/workouts/routine">
+          <Button variant="outline" size="sm" className="shrink-0 gap-1.5">
+            <CalendarDays className="size-4" />
+            My Routine
+          </Button>
+        </Link>
       </div>
 
       {/* Workout Table */}
