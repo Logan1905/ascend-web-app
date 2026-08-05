@@ -32,7 +32,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isRecovery, setIsRecovery] = useState(false);
+  const [isRecovery, setIsRecovery] = useState(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("ascend_recovery") === "true";
+    }
+    return false;
+  });
 
   function getSupabase(): SupabaseClient {
     if (!supabaseRef.current) {
@@ -59,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Detect password recovery flow
       if (event === "PASSWORD_RECOVERY") {
         setIsRecovery(true);
+        sessionStorage.setItem("ascend_recovery", "true");
       }
     });
 
@@ -67,6 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   function clearRecovery() {
     setIsRecovery(false);
+    sessionStorage.removeItem("ascend_recovery");
   }
 
   async function signIn(email: string, password: string) {
@@ -94,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function handleSignOut() {
     setIsRecovery(false);
+    sessionStorage.removeItem("ascend_recovery");
     await getSupabase().auth.signOut();
   }
 
