@@ -6,10 +6,14 @@ import { MobileTopBar } from "@/components/shared/mobile-top-bar";
 import { MobileBottomNav } from "@/components/shared/mobile-bottom-nav";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { isRecovery } = useAuth();
+  const { isRecovery, loading } = useAuth();
 
-  // When in recovery mode, hide all navigation so the user
-  // stays locked on the password reset screen.
+  // While auth is loading, don't show navigation yet to prevent flash
+  if (loading) {
+    return <main className="flex flex-1 flex-col">{children}</main>;
+  }
+
+  // When in recovery mode, hide all navigation
   if (isRecovery) {
     return <main className="flex flex-1 flex-col">{children}</main>;
   }

@@ -27,17 +27,19 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+const RECOVERY_KEY = "ascend_recovery";
+
+function getInitialRecovery(): boolean {
+  if (typeof window === "undefined") return false;
+  return sessionStorage.getItem(RECOVERY_KEY) === "true";
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabaseRef = useRef<SupabaseClient | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isRecovery, setIsRecovery] = useState(() => {
-    if (typeof window !== "undefined") {
-      return sessionStorage.getItem("ascend_recovery") === "true";
-    }
-    return false;
-  });
+  const [isRecovery, setIsRecovery] = useState(getInitialRecovery);
 
   function getSupabase(): SupabaseClient {
     if (!supabaseRef.current) {
@@ -64,7 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Detect password recovery flow
       if (event === "PASSWORD_RECOVERY") {
         setIsRecovery(true);
-        sessionStorage.setItem("ascend_recovery", "true");
+        sessionStorage.setItem(RECOVERY_KEY, "true");
       }
     });
 
@@ -73,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   function clearRecovery() {
     setIsRecovery(false);
-    sessionStorage.removeItem("ascend_recovery");
+    sessionStorage.removeItem(RECOVERY_KEY);
   }
 
   async function signIn(email: string, password: string) {
@@ -101,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function handleSignOut() {
     setIsRecovery(false);
-    sessionStorage.removeItem("ascend_recovery");
+    sessionStorage.removeItem(RECOVERY_KEY);
     await getSupabase().auth.signOut();
   }
 
