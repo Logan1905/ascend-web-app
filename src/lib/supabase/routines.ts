@@ -106,14 +106,14 @@ function mapRoutine(row: RoutineRow): Routine {
 
 // --- Queries ---
 
-/** Fetches every routine belonging to the signed-in user, newest first. */
+/** Fetches every routine belonging to the signed-in user, ordered by position. */
 export async function fetchRoutines(): Promise<Routine[]> {
   const supabase = createClient();
 
   const { data, error } = await supabase
     .from("routines")
     .select(ROUTINE_SELECT)
-    .order("created_at", { ascending: false });
+    .order("position", { ascending: true });
 
   if (error) throw new Error(error.message);
 
@@ -299,4 +299,18 @@ export async function setActiveRoutine(routineId: string): Promise<void> {
   });
 
   if (error) throw new Error(error.message);
+}
+
+/** Persists the user's custom routine order (array of routine IDs in order). */
+export async function updateRoutineOrder(routineIds: string[]): Promise<void> {
+  const supabase = createClient();
+
+  // Update each routine's position in a batch
+  const updates = routineIds.map((id, index) =>
+    supabase.from("routines").update({ position: index }).eq("id", id),
+  );
+
+  const results = await Promise.all(updates);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw new Error(failed.error.message);
 }

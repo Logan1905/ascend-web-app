@@ -11,6 +11,7 @@ import {
   Trash2,
   Pencil,
   GripVertical,
+  AlertCircle,
 } from "lucide-react";
 import {
   DndContext,
@@ -35,8 +36,63 @@ import {
   deleteRoutine,
   fetchRoutines,
   setActiveRoutine,
+  updateRoutineOrder,
 } from "@/lib/supabase/routines";
 import { DAYS_OF_WEEK, type Routine } from "@/types/routine";
+
+// --- Unsaved changes modal ---
+
+interface UnsavedModalProps {
+  routineName: string;
+  saving: boolean;
+  onSave: () => void;
+  onDiscard: () => void;
+}
+
+function UnsavedModal({
+  routineName,
+  saving,
+  onSave,
+  onDiscard,
+}: UnsavedModalProps) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div className="bg-background/80 absolute inset-0 backdrop-blur-sm" />
+      {/* Modal */}
+      <div className="border-border bg-card relative w-full max-w-sm rounded-xl border p-6 shadow-lg">
+        <div className="mb-4 flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/30">
+            <AlertCircle className="size-5 text-orange-500" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Unsaved Selection</h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              You selected{" "}
+              <span className="text-foreground font-medium">
+                &ldquo;{routineName}&rdquo;
+              </span>{" "}
+              as your active routine but haven&apos;t saved yet.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={onDiscard}
+            disabled={saving}
+          >
+            Discard
+          </Button>
+          <Button className="flex-1" onClick={onSave} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // --- Sortable routine card ---
 
@@ -83,7 +139,6 @@ function SortableRoutineCard({
       }`}
     >
       <div className="mb-3 flex items-center gap-2">
-        {/* Drag handle */}
         <button
           {...attributes}
           {...listeners}
@@ -93,7 +148,6 @@ function SortableRoutineCard({
           <GripVertical className="size-4" />
         </button>
 
-        {/* Active toggle */}
         <button
           onClick={() => onSelect(routine.id)}
           disabled={busyId === routine.id}
@@ -129,7 +183,6 @@ function SortableRoutineCard({
         </button>
       </div>
 
-      {/* Week grid */}
       <div className="grid grid-cols-7 gap-1.5">
         {DAYS_OF_WEEK.map(({ value, short }) => {
           const day = routine.days.find((d) => d.dayOfWeek === value);
@@ -167,13 +220,17 @@ export default function RoutinesPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  // Track if user selected a different routine than the currently active one
   const [pendingActiveId, setPendingActiveId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
   const currentActiveId = routines.find((r) => r.isActive)?.id ?? null;
   const hasUnsavedChange =
     pendingActiveId !== null && pendingActiveId !== currentActiveId;
+
+  const selectedName =
+    routines.find((r) => r.id === pendingActiveId)?.name ??
+    "the selected routine";
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -210,7 +267,6 @@ export default function RoutinesPage() {
 
   function handleSelect(routineId: string) {
     if (routineId === currentActiveId) {
-      // Deselect pending change — go back to current active
       setPendingActiveId(null);
     } else {
       setPendingActiveId(routineId);
@@ -227,6 +283,7 @@ export default function RoutinesPage() {
         prev.map((r) => ({ ...r, isActive: r.id === pendingActiveId })),
       );
       setPendingActiveId(null);
+      setShowModal(false);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not change the routine.",
@@ -236,10 +293,14 @@ export default function RoutinesPage() {
     }
   }
 
+  function handleDiscard() {
+    setPendingActiveId(null);
+    setShowModal(false);
+  }
+
   async function handleDelete(routine: Routine) {
-    if (!window.confirm(`Delete "${routine.name}"? This cannot be undone.`)) {
+    if (!window.confirm(`Delete "${routine.name}"? This cannot be undone.`))
       return;
-    }
     setBusyId(routine.id);
     setError(null);
     try {
@@ -262,141 +323,143 @@ export default function RoutinesPage() {
     setRoutines((prev) => {
       const oldIndex = prev.findIndex((r) => r.id === active.id);
       const newIndex = prev.findIndex((r) => r.id === over.id);
-      return arrayMove(prev, oldIndex, newIndex);
+      const reordered = arrayMove(prev, oldIndex, newIndex);
+
+      // Persist the new order in the background
+      updateRoutineOrder(reordered.map((r) => r.id)).catch(() => {
+        // Silently fail — order will correct on next load
+      });
+
+      return reordered;
     });
   }
 
-  async function handleBack() {
-    if (!hasUnsavedChange) {
-      router.push("/workouts");
-      return;
-    }
-
-    const selectedName =
-      routines.find((r) => r.id === pendingActiveId)?.name ??
-      "the selected routine";
-
-    const save = window.confirm(
-      `You selected "${selectedName}" but haven't saved yet.\n\nPress OK to save and go back, or Cancel to discard your selection.`,
-    );
-
-    if (save) {
-      await handleSave();
-      router.push("/workouts");
+  function handleBack() {
+    if (hasUnsavedChange) {
+      setShowModal(true);
     } else {
-      setPendingActiveId(null);
       router.push("/workouts");
     }
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleBack}
-            className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-md p-1.5 transition-colors"
-            aria-label="Back to workouts"
-          >
-            <ArrowLeft className="size-5" />
-          </button>
-          <h1 className="text-2xl font-bold tracking-tight">My Routines</h1>
-        </div>
+    <>
+      {/* Modal */}
+      {showModal && (
+        <UnsavedModal
+          routineName={selectedName}
+          saving={saving}
+          onSave={async () => {
+            await handleSave();
+            router.push("/workouts");
+          }}
+          onDiscard={handleDiscard}
+        />
+      )}
 
-        <div className="flex items-center gap-2">
-          {/* Save button — only visible when a new selection is made */}
-          {hasUnsavedChange && (
-            <Button
-              size="sm"
-              className="shrink-0 gap-1.5"
-              onClick={handleSave}
-              disabled={saving}
+      <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-6">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleBack}
+              className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-md p-1.5 transition-colors"
+              aria-label="Back to workouts"
             >
-              <Check className="size-4" />
-              {saving ? "Saving…" : "Save"}
-            </Button>
-          )}
+              <ArrowLeft className="size-5" />
+            </button>
+            <h1 className="text-2xl font-bold tracking-tight">My Routines</h1>
+          </div>
 
-          {user && (
-            <Link href="/workouts/routines/new">
+          <div className="flex items-center gap-2">
+            {hasUnsavedChange && (
               <Button
                 size="sm"
-                variant={hasUnsavedChange ? "outline" : "default"}
                 className="shrink-0 gap-1.5"
+                onClick={handleSave}
+                disabled={saving}
               >
+                <Check className="size-4" />
+                {saving ? "Saving…" : "Save"}
+              </Button>
+            )}
+
+            {user && (
+              <Link href="/workouts/routines/new">
+                <Button
+                  size="sm"
+                  variant={hasUnsavedChange ? "outline" : "default"}
+                  className="shrink-0 gap-1.5"
+                >
+                  <Plus className="size-4" />
+                  Add Routine
+                </Button>
+              </Link>
+            )}
+          </div>
+        </div>
+
+        {error && (
+          <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border px-4 py-3 text-sm">
+            {error}
+          </div>
+        )}
+
+        {!authLoading && !user && (
+          <div className="border-border flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed py-16 text-center">
+            <p className="text-muted-foreground">
+              Sign in to create and save your routines.
+            </p>
+            <Link href="/profile">
+              <Button size="sm">Go to Sign In</Button>
+            </Link>
+          </div>
+        )}
+
+        {(authLoading || (user && loading)) && (
+          <p className="text-muted-foreground text-sm">Loading routines…</p>
+        )}
+
+        {user && !loading && routines.length === 0 && !error && (
+          <div className="border-border flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed py-16 text-center">
+            <p className="text-muted-foreground">
+              No routines yet. Create one to get started!
+            </p>
+            <Link href="/workouts/routines/new">
+              <Button size="sm" className="gap-1.5">
                 <Plus className="size-4" />
                 Add Routine
               </Button>
             </Link>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
 
-      {error && (
-        <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border px-4 py-3 text-sm">
-          {error}
-        </div>
-      )}
-
-      {/* Not signed in */}
-      {!authLoading && !user && (
-        <div className="border-border flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed py-16 text-center">
-          <p className="text-muted-foreground">
-            Sign in to create and save your routines.
-          </p>
-          <Link href="/profile">
-            <Button size="sm">Go to Sign In</Button>
-          </Link>
-        </div>
-      )}
-
-      {/* Loading */}
-      {(authLoading || (user && loading)) && (
-        <p className="text-muted-foreground text-sm">Loading routines…</p>
-      )}
-
-      {/* Empty */}
-      {user && !loading && routines.length === 0 && !error && (
-        <div className="border-border flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed py-16 text-center">
-          <p className="text-muted-foreground">
-            No routines yet. Create one to get started!
-          </p>
-          <Link href="/workouts/routines/new">
-            <Button size="sm" className="gap-1.5">
-              <Plus className="size-4" />
-              Add Routine
-            </Button>
-          </Link>
-        </div>
-      )}
-
-      {/* Routines list with drag-and-drop */}
-      {user && !loading && routines.length > 0 && (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={routines.map((r) => r.id)}
-            strategy={verticalListSortingStrategy}
+        {user && !loading && routines.length > 0 && (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
           >
-            <div className="space-y-4">
-              {routines.map((routine) => (
-                <SortableRoutineCard
-                  key={routine.id}
-                  routine={routine}
-                  pendingActiveId={pendingActiveId}
-                  busyId={busyId}
-                  onSelect={handleSelect}
-                  onDelete={handleDelete}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-      )}
-    </div>
+            <SortableContext
+              items={routines.map((r) => r.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-4">
+                {routines.map((routine) => (
+                  <SortableRoutineCard
+                    key={routine.id}
+                    routine={routine}
+                    pendingActiveId={pendingActiveId}
+                    busyId={busyId}
+                    onSelect={handleSelect}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        )}
+      </div>
+    </>
   );
 }
