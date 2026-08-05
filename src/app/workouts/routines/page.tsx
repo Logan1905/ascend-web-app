@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -40,40 +40,32 @@ import {
 } from "@/lib/supabase/routines";
 import { DAYS_OF_WEEK, type Routine } from "@/types/routine";
 
-// --- Unsaved changes modal ---
+// --- Modal ---
 
 interface UnsavedModalProps {
-  routineName: string;
+  message: string;
   saving: boolean;
   onSave: () => void;
   onDiscard: () => void;
 }
 
 function UnsavedModal({
-  routineName,
+  message,
   saving,
   onSave,
   onDiscard,
 }: UnsavedModalProps) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      {/* Backdrop */}
       <div className="bg-background/80 absolute inset-0 backdrop-blur-sm" />
-      {/* Modal */}
       <div className="border-border bg-card relative w-full max-w-sm rounded-xl border p-6 shadow-lg">
         <div className="mb-4 flex items-start gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/30">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/30">
             <AlertCircle className="size-5 text-orange-500" />
           </div>
           <div>
-            <h2 className="text-base font-semibold">Unsaved Selection</h2>
-            <p className="text-muted-foreground mt-1 text-sm">
-              You selected{" "}
-              <span className="text-foreground font-medium">
-                &ldquo;{routineName}&rdquo;
-              </span>{" "}
-              as your active routine but haven&apos;t saved yet.
-            </p>
+            <h2 className="text-base font-semibold">Unsaved Changes</h2>
+            <p className="text-muted-foreground mt-1 text-sm">{message}</p>
           </div>
         </div>
         <div className="flex gap-3">
@@ -94,7 +86,7 @@ function UnsavedModal({
   );
 }
 
-// --- Sortable routine card ---
+// --- Sortable card ---
 
 interface SortableRoutineCardProps {
   routine: Routine;
@@ -134,9 +126,7 @@ function SortableRoutineCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-card rounded-xl border p-4 transition-colors ${
-        isSelected ? "border-primary" : "border-border"
-      }`}
+      className={`bg-card rounded-xl border p-4 transition-colors ${isSelected ? "border-primary" : "border-border"}`}
     >
       <div className="mb-3 flex items-center gap-2">
         <button
@@ -220,17 +210,20 @@ export default function RoutinesPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  // Unsaved selection
   const [pendingActiveId, setPendingActiveId] = useState<string | null>(null);
+
+  // Unsaved order — track the original order IDs to detect changes
+  const originalOrderRef = useRef<string[]>([]);
+  const [orderChanged, setOrderChanged] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
   const currentActiveId = routines.find((r) => r.isActive)?.id ?? null;
-  const hasUnsavedChange =
+  const hasUnsavedSelection =
     pendingActiveId !== null && pendingActiveId !== currentActiveId;
-
-  const selectedName =
-    routines.find((r) => r.id === pendingActiveId)?.name ??
-    "the selected routine";
+  const hasUnsavedChanges = hasUnsavedSelection || orderChanged;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -248,7 +241,10 @@ export default function RoutinesPage() {
       setError(null);
       try {
         const data = await fetchRoutines();
-        if (!cancelled) setRoutines(data);
+        if (!cancelled) {
+          setRoutines(data);
+          originalOrderRef.current = data.map((r) => r.id);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -273,28 +269,44 @@ export default function RoutinesPage() {
     }
   }
 
-  async function handleSave() {
-    if (!pendingActiveId) return;
+  async function handleSaveAll() {
     setSaving(true);
     setError(null);
     try {
-      await setActiveRoutine(pendingActiveId);
-      setRoutines((prev) =>
-        prev.map((r) => ({ ...r, isActive: r.id === pendingActiveId })),
-      );
-      setPendingActiveId(null);
+      // Save active routine change
+      if (hasUnsavedSelection && pendingActiveId) {
+        await setActiveRoutine(pendingActiveId);
+        setRoutines((prev) =>
+          prev.map((r) => ({ ...r, isActive: r.id === pendingActiveId })),
+        );
+        setPendingActiveId(null);
+      }
+      // Save order change
+      if (orderChanged) {
+        await updateRoutineOrder(routines.map((r) => r.id));
+        originalOrderRef.current = routines.map((r) => r.id);
+        setOrderChanged(false);
+      }
       setShowModal(false);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not change the routine.",
-      );
+      setError(err instanceof Error ? err.message : "Could not save changes.");
     } finally {
       setSaving(false);
     }
   }
 
-  function handleDiscard() {
+  function handleDiscardAll() {
+    // Revert selection
     setPendingActiveId(null);
+    // Revert order
+    if (orderChanged) {
+      const original = originalOrderRef.current;
+      setRoutines((prev) => {
+        const map = new Map(prev.map((r) => [r.id, r]));
+        return original.map((id) => map.get(id)!).filter(Boolean);
+      });
+      setOrderChanged(false);
+    }
     setShowModal(false);
   }
 
@@ -307,6 +319,9 @@ export default function RoutinesPage() {
       await deleteRoutine(routine.id);
       if (pendingActiveId === routine.id) setPendingActiveId(null);
       setRoutines((prev) => prev.filter((r) => r.id !== routine.id));
+      originalOrderRef.current = originalOrderRef.current.filter(
+        (id) => id !== routine.id,
+      );
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not delete the routine.",
@@ -325,35 +340,48 @@ export default function RoutinesPage() {
       const newIndex = prev.findIndex((r) => r.id === over.id);
       const reordered = arrayMove(prev, oldIndex, newIndex);
 
-      // Persist the new order in the background
-      updateRoutineOrder(reordered.map((r) => r.id)).catch(() => {
-        // Silently fail — order will correct on next load
-      });
+      // Check if order differs from original
+      const currentIds = reordered.map((r) => r.id);
+      const changed = currentIds.some(
+        (id, i) => id !== originalOrderRef.current[i],
+      );
+      setOrderChanged(changed);
 
       return reordered;
     });
   }
 
   function handleBack() {
-    if (hasUnsavedChange) {
+    if (hasUnsavedChanges) {
       setShowModal(true);
     } else {
       router.push("/workouts");
     }
   }
 
+  // Build modal message
+  function getModalMessage(): string {
+    if (hasUnsavedSelection && orderChanged) {
+      const name =
+        routines.find((r) => r.id === pendingActiveId)?.name ?? "a routine";
+      return `You selected "${name}" and reordered your routines. Save your changes?`;
+    }
+    if (hasUnsavedSelection) {
+      const name =
+        routines.find((r) => r.id === pendingActiveId)?.name ?? "a routine";
+      return `You selected "${name}" as your active routine. Save?`;
+    }
+    return "You reordered your routines. Save the new order?";
+  }
+
   return (
     <>
-      {/* Modal */}
       {showModal && (
         <UnsavedModal
-          routineName={selectedName}
+          message={getModalMessage()}
           saving={saving}
-          onSave={async () => {
-            await handleSave();
-            router.push("/workouts");
-          }}
-          onDiscard={handleDiscard}
+          onSave={handleSaveAll}
+          onDiscard={handleDiscardAll}
         />
       )}
 
@@ -372,11 +400,11 @@ export default function RoutinesPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {hasUnsavedChange && (
+            {hasUnsavedChanges && (
               <Button
                 size="sm"
                 className="shrink-0 gap-1.5"
-                onClick={handleSave}
+                onClick={handleSaveAll}
                 disabled={saving}
               >
                 <Check className="size-4" />
@@ -388,7 +416,7 @@ export default function RoutinesPage() {
               <Link href="/workouts/routines/new">
                 <Button
                   size="sm"
-                  variant={hasUnsavedChange ? "outline" : "default"}
+                  variant={hasUnsavedChanges ? "outline" : "default"}
                   className="shrink-0 gap-1.5"
                 >
                   <Plus className="size-4" />
