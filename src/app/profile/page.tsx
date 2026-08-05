@@ -13,11 +13,12 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/providers/auth-provider";
+import { createClient } from "@/lib/supabase/client";
 
 export default function ProfilePage() {
   const { user, loading, signIn, signUp, signOut } = useAuth();
 
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [showPassword, setShowPassword] = useState(false);
 
   // Form fields
@@ -28,8 +29,8 @@ export default function ProfilePage() {
 
   // UI state
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [confirmationSent, setConfirmationSent] = useState(false);
 
   function resetForm() {
     setFullName("");
@@ -37,65 +38,81 @@ export default function ProfilePage() {
     setPassword("");
     setConfirmPassword("");
     setError(null);
+    setSuccess(null);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    window.alert(`Form submitted! Mode: ${mode}, Email: ${email}`);
+  async function handleSignIn() {
     setError(null);
-
-    // Basic validation
     if (!email || !password) {
       setError("Please fill in all required fields.");
       return;
     }
-    if (mode === "register") {
-      if (password.length < 6) {
-        setError("Password must be at least 6 characters.");
-        return;
-      }
-      if (password !== confirmPassword) {
-        setError("Passwords do not match.");
-        return;
-      }
-      if (!fullName.trim()) {
-        setError("Please enter your name.");
-        return;
-      }
-    }
-
     setSubmitting(true);
     try {
-      if (mode === "login") {
-        const { error } = await signIn(email, password);
-        if (error) {
-          setError(`Sign in failed: ${error}`);
-          window.alert(`Sign in failed: ${error}`);
-        } else {
-          window.alert("Sign in successful!");
-        }
+      const { error } = await signIn(email, password);
+      if (error) setError(`Sign in failed: ${error}`);
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "An unexpected error occurred.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleSignUp() {
+    setError(null);
+    if (!email || !password) {
+      setError("Please fill in all required fields.");
+      return;
+    }
+    if (!fullName.trim()) {
+      setError("Please enter your name.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const { error } = await signUp(email, password, fullName.trim());
+      if (error) setError(`Sign up failed: ${error}`);
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "An unexpected error occurred.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    setError(null);
+    setSuccess(null);
+    if (!email) {
+      setError("Please enter your email address.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/profile`,
+      });
+      if (error) {
+        setError(error.message);
       } else {
-        const { error, needsConfirmation } = await signUp(
-          email,
-          password,
-          fullName.trim(),
-        );
-        if (error) {
-          setError(`Sign up failed: ${error}`);
-          window.alert(`Sign up failed: ${error}`);
-        } else if (needsConfirmation) {
-          setConfirmationSent(true);
-          window.alert("Success! Check your email to confirm your account.");
-        } else {
-          setError(null);
-          window.alert("Account created and signed in!");
-        }
+        setSuccess("Password reset link sent! Check your email.");
       }
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "An unexpected error occurred";
-      setError(`Unexpected error: ${message}`);
-      window.alert(`Unexpected error: ${message}`);
+      setError(
+        err instanceof Error ? err.message : "An unexpected error occurred.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -142,39 +159,87 @@ export default function ProfilePage() {
     );
   }
 
-  // --- Email confirmation sent ---
-  if (confirmationSent) {
+  // --- Forgot password view ---
+  if (mode === "forgot") {
     return (
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-8">
-        <div className="w-full max-w-sm space-y-4 text-center">
-          <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
-            <CheckCircle2 className="size-8 text-green-600" />
+        <div className="w-full max-w-sm space-y-6">
+          <div className="text-center">
+            <div className="bg-accent mx-auto mb-4 flex size-16 items-center justify-center rounded-full">
+              <Mail className="text-muted-foreground size-8" />
+            </div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Reset Password
+            </h1>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Enter your email and we&apos;ll send you a reset link.
+            </p>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Check your email
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            We sent a confirmation link to{" "}
-            <span className="text-foreground font-medium">{email}</span>.
-            Confirm your email to finish creating your account.
+
+          {error && (
+            <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border px-4 py-3 text-sm">
+              {error}
+            </div>
+          )}
+
+          {success && (
+            <div className="rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="size-4 shrink-0" />
+                {success}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label
+                htmlFor="reset-email"
+                className="text-foreground text-sm font-medium"
+              >
+                Email
+              </label>
+              <div className="relative">
+                <Mail className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                <input
+                  id="reset-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border pr-3 pl-10 text-sm transition-colors outline-none focus:ring-2"
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={handleForgotPassword}
+              className="bg-primary text-primary-foreground hover:bg-primary/80 h-9 w-full rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {submitting ? "Sending…" : "Send Reset Link"}
+            </button>
+          </div>
+
+          <p className="text-muted-foreground text-center text-sm">
+            Remember your password?{" "}
+            <button
+              onClick={() => {
+                setMode("login");
+                resetForm();
+              }}
+              className="text-primary font-medium hover:underline"
+            >
+              Sign in
+            </button>
           </p>
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => {
-              setConfirmationSent(false);
-              setMode("login");
-              resetForm();
-            }}
-          >
-            Back to Sign In
-          </Button>
         </div>
       </div>
     );
   }
 
-  // --- Auth form ---
+  // --- Auth form (login / register) ---
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-4 py-8">
       <div className="w-full max-w-sm space-y-6">
@@ -200,9 +265,8 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Form */}
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          {/* Name field (register only) */}
+        {/* Form fields */}
+        <div className="space-y-4">
           {mode === "register" && (
             <div className="space-y-1.5">
               <label
@@ -225,7 +289,6 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* Email field */}
           <div className="space-y-1.5">
             <label
               htmlFor="email"
@@ -246,14 +309,28 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Password field */}
           <div className="space-y-1.5">
-            <label
-              htmlFor="password"
-              className="text-foreground text-sm font-medium"
-            >
-              Password
-            </label>
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor="password"
+                className="text-foreground text-sm font-medium"
+              >
+                Password
+              </label>
+              {mode === "login" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("forgot");
+                    resetForm();
+                    setEmail(email);
+                  }}
+                  className="text-primary text-xs font-medium hover:underline"
+                >
+                  Forgot password?
+                </button>
+              )}
+            </div>
             <div className="relative">
               <Lock className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
               <input
@@ -279,7 +356,6 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Confirm password (register only) */}
           {mode === "register" && (
             <div className="space-y-1.5">
               <label
@@ -302,67 +378,11 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* Submit */}
+          {/* Submit button */}
           <button
             type="button"
             disabled={submitting}
-            onClick={async () => {
-              // Validation
-              if (!email || !password) {
-                window.alert("Please fill in all required fields.");
-                return;
-              }
-              if (mode === "register") {
-                if (!fullName.trim()) {
-                  window.alert("Please enter your name.");
-                  return;
-                }
-                if (password.length < 6) {
-                  window.alert("Password must be at least 6 characters.");
-                  return;
-                }
-                if (password !== confirmPassword) {
-                  window.alert("Passwords do not match.");
-                  return;
-                }
-              }
-
-              setSubmitting(true);
-              try {
-                if (mode === "login") {
-                  const { error } = await signIn(email, password);
-                  if (error) {
-                    window.alert(`Sign in failed: ${error}`);
-                    setError(`Sign in failed: ${error}`);
-                  } else {
-                    window.alert("Sign in successful!");
-                  }
-                } else {
-                  const { error, needsConfirmation } = await signUp(
-                    email,
-                    password,
-                    fullName.trim(),
-                  );
-                  if (error) {
-                    window.alert(`Sign up failed: ${error}`);
-                    setError(`Sign up failed: ${error}`);
-                  } else if (needsConfirmation) {
-                    window.alert(
-                      "Success! Check your email to confirm your account.",
-                    );
-                    setConfirmationSent(true);
-                  } else {
-                    window.alert("Account created and signed in!");
-                  }
-                }
-              } catch (err: unknown) {
-                const msg = err instanceof Error ? err.message : String(err);
-                window.alert(`Unexpected error: ${msg}`);
-                setError(`Unexpected error: ${msg}`);
-              } finally {
-                setSubmitting(false);
-              }
-            }}
+            onClick={mode === "login" ? handleSignIn : handleSignUp}
             className="bg-primary text-primary-foreground hover:bg-primary/80 h-9 w-full rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
           >
             {submitting
@@ -371,7 +391,7 @@ export default function ProfilePage() {
                 ? "Sign In"
                 : "Create Account"}
           </button>
-        </form>
+        </div>
 
         {/* Toggle mode */}
         <p className="text-muted-foreground text-center text-sm">
@@ -402,11 +422,6 @@ export default function ProfilePage() {
               </button>
             </>
           )}
-        </p>
-
-        {/* Debug info — remove after confirming auth works */}
-        <p className="text-muted-foreground/50 text-center text-[10px] break-all">
-          Supabase: {process.env.NEXT_PUBLIC_SUPABASE_URL ?? "NOT SET"}
         </p>
       </div>
     </div>
