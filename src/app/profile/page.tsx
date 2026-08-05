@@ -101,8 +101,13 @@ export default function ProfilePage() {
     setSubmitting(true);
     try {
       const supabase = createClient();
+      // Build the redirect URL including the basePath for GitHub Pages
+      const origin = window.location.origin;
+      const pathPrefix = window.location.pathname.startsWith("/ascend-web-app")
+        ? "/ascend-web-app"
+        : "";
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/profile`,
+        redirectTo: `${origin}${pathPrefix}/profile`,
       });
       if (error) {
         setError(error.message);
