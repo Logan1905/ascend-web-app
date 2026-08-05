@@ -16,7 +16,16 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { createClient } from "@/lib/supabase/client";
 
 export default function ProfilePage() {
-  const { user, loading, signIn, signUp, signOut } = useAuth();
+  const {
+    user,
+    loading,
+    signIn,
+    signUp,
+    signOut,
+    isRecovery,
+    clearRecovery,
+    updatePassword,
+  } = useAuth();
 
   const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [showPassword, setShowPassword] = useState(false);
@@ -129,6 +138,16 @@ export default function ProfilePage() {
       <div className="flex flex-1 items-center justify-center px-4 py-8">
         <p className="text-muted-foreground text-sm">Loading…</p>
       </div>
+    );
+  }
+
+  // --- Password recovery view ---
+  if (user && isRecovery) {
+    return (
+      <ResetPasswordForm
+        onDone={clearRecovery}
+        updatePassword={updatePassword}
+      />
     );
   }
 
@@ -428,6 +447,160 @@ export default function ProfilePage() {
             </>
           )}
         </p>
+      </div>
+    </div>
+  );
+}
+
+// --- Reset Password Form (shown after clicking recovery link) ---
+
+function ResetPasswordForm({
+  onDone,
+  updatePassword,
+}: {
+  onDone: () => void;
+  updatePassword: (pw: string) => Promise<{ error: string | null }>;
+}) {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNew, setConfirmNew] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleReset() {
+    setError(null);
+    if (!newPassword) {
+      setError("Please enter a new password.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    if (newPassword !== confirmNew) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const { error } = await updatePassword(newPassword);
+      if (error) {
+        setError(error);
+      } else {
+        setSuccess(true);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (success) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center px-4 py-8">
+        <div className="w-full max-w-sm space-y-4 text-center">
+          <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
+            <CheckCircle2 className="size-8 text-green-600" />
+          </div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Password Updated
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            Your password has been changed successfully.
+          </p>
+          <button
+            onClick={onDone}
+            className="bg-primary text-primary-foreground hover:bg-primary/80 h-9 w-full rounded-lg text-sm font-medium transition-colors"
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center px-4 py-8">
+      <div className="w-full max-w-sm space-y-6">
+        <div className="text-center">
+          <div className="bg-accent mx-auto mb-4 flex size-16 items-center justify-center rounded-full">
+            <Lock className="text-muted-foreground size-8" />
+          </div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Set New Password
+          </h1>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Enter your new password below.
+          </p>
+        </div>
+
+        {error && (
+          <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border px-4 py-3 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <label
+              htmlFor="new-password"
+              className="text-foreground text-sm font-medium"
+            >
+              New Password
+            </label>
+            <div className="relative">
+              <Lock className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+              <input
+                id="new-password"
+                type={showPw ? "text" : "password"}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="••••••••"
+                className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border pr-10 pl-10 text-sm transition-colors outline-none focus:ring-2"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw(!showPw)}
+                className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
+              >
+                {showPw ? (
+                  <EyeOff className="size-4" />
+                ) : (
+                  <Eye className="size-4" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label
+              htmlFor="confirm-new-password"
+              className="text-foreground text-sm font-medium"
+            >
+              Confirm New Password
+            </label>
+            <div className="relative">
+              <Lock className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+              <input
+                id="confirm-new-password"
+                type={showPw ? "text" : "password"}
+                value={confirmNew}
+                onChange={(e) => setConfirmNew(e.target.value)}
+                placeholder="••••••••"
+                className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border pr-3 pl-10 text-sm transition-colors outline-none focus:ring-2"
+              />
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={handleReset}
+            className="bg-primary text-primary-foreground hover:bg-primary/80 h-9 w-full rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {submitting ? "Updating…" : "Update Password"}
+          </button>
+        </div>
       </div>
     </div>
   );

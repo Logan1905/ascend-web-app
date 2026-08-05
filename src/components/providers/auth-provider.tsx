@@ -9,6 +9,9 @@ interface AuthContextValue {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  /** True when the user arrived via a password recovery link. */
+  isRecovery: boolean;
+  clearRecovery: () => void;
   signIn: (
     email: string,
     password: string,
@@ -19,6 +22,7 @@ interface AuthContextValue {
     fullName: string,
   ) => Promise<{ error: string | null; needsConfirmation: boolean }>;
   signOut: () => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<{ error: string | null }>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -28,8 +32,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isRecovery, setIsRecovery] = useState(false);
 
-  // Lazily get or create the Supabase client (only in the browser).
   function getSupabase(): SupabaseClient {
     if (!supabaseRef.current) {
       supabaseRef.current = createClient();
@@ -40,23 +44,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const supabase = getSupabase();
 
-    // Load any existing session on mount.
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setUser(data.session?.user ?? null);
       setLoading(false);
     });
 
-    // Keep state in sync with auth changes (sign in, sign out, refresh).
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
       setUser(newSession?.user ?? null);
+
+      // Detect password recovery flow
+      if (event === "PASSWORD_RECOVERY") {
+        setIsRecovery(true);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  function clearRecovery() {
+    setIsRecovery(false);
+  }
 
   async function signIn(email: string, password: string) {
     const { error } = await getSupabase().auth.signInWithPassword({
@@ -82,7 +93,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function handleSignOut() {
+    setIsRecovery(false);
     await getSupabase().auth.signOut();
+  }
+
+  async function updatePassword(newPassword: string) {
+    const { error } = await getSupabase().auth.updateUser({
+      password: newPassword,
+    });
+    return { error: error?.message ?? null };
   }
 
   return (
@@ -91,9 +110,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         session,
         loading,
+        isRecovery,
+        clearRecovery,
         signIn,
         signUp,
         signOut: handleSignOut,
+        updatePassword,
       }}
     >
       {children}
