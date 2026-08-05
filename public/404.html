@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Ascend</title>
+    <script>
+      // GitHub Pages serves this for any unknown route.
+      // Redirect to the app's base path, preserving the hash fragment
+      // (which contains the Supabase auth token after email confirmation).
+      var base = "/ascend-web-app/";
+      var hash = window.location.hash;
+      var search = window.location.search;
+      window.location.replace(base + search + hash);
+    </script>
+  </head>
+  <body>
+    <p>Redirecting...</p>
+  </body>
+</html>
