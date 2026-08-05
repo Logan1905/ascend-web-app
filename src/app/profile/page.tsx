@@ -147,6 +147,7 @@ export default function ProfilePage() {
       <ResetPasswordForm
         onDone={clearRecovery}
         updatePassword={updatePassword}
+        onSignInInstead={signOut}
       />
     );
   }
@@ -457,9 +458,11 @@ export default function ProfilePage() {
 function ResetPasswordForm({
   onDone,
   updatePassword,
+  onSignInInstead,
 }: {
   onDone: () => void;
   updatePassword: (pw: string) => Promise<{ error: string | null }>;
+  onSignInInstead: () => void;
 }) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmNew, setConfirmNew] = useState("");
@@ -601,6 +604,16 @@ function ResetPasswordForm({
             {submitting ? "Updating…" : "Update Password"}
           </button>
         </div>
+
+        <p className="text-muted-foreground text-center text-sm">
+          <button
+            type="button"
+            onClick={onSignInInstead}
+            className="text-primary font-medium hover:underline"
+          >
+            Sign in instead?
+          </button>
+        </p>
       </div>
     </div>
   );
