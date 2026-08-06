@@ -318,9 +318,9 @@ function ProfileView({ onSignOut }: { onSignOut: () => void }) {
             return (
               <div
                 key={day}
-                className={`flex aspect-square items-center justify-center rounded-md text-xs font-medium ${
+                className={`flex aspect-square flex-col items-center justify-center gap-0.5 rounded-md text-xs font-medium ${
                   isToday
-                    ? "bg-blue-500 text-white"
+                    ? "bg-blue-500/20 text-blue-700 ring-2 ring-blue-500 dark:text-blue-300"
                     : status === "green"
                       ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                       : status === "red"
@@ -328,15 +328,9 @@ function ProfileView({ onSignOut }: { onSignOut: () => void }) {
                         : "text-muted-foreground"
                 }`}
               >
-                {isToday ? (
-                  <span>{day}</span>
-                ) : status === "green" ? (
-                  <Check className="size-3.5" />
-                ) : status === "red" ? (
-                  <X className="size-3.5" />
-                ) : (
-                  <span>{day}</span>
-                )}
+                <span className="text-[10px] leading-none">{day}</span>
+                {status === "green" && <Check className="size-3" />}
+                {status === "red" && <X className="size-3" />}
               </div>
             );
           })}
