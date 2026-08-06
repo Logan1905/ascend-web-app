@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   LayoutGrid,
   Dumbbell,
@@ -19,6 +20,7 @@ import { NotificationDropdown } from "@/components/shared/notification-dropdown"
 import { useAuth } from "@/components/providers/auth-provider";
 
 export function MobileTopBar() {
+  const router = useRouter();
   const { user, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -90,9 +92,10 @@ export function MobileTopBar() {
               <>
                 <div className="border-border border-t" />
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     setMenuOpen(false);
-                    signOut();
+                    await signOut();
+                    router.push("/profile");
                   }}
                   className="text-destructive hover:bg-destructive/10 flex w-full items-center gap-3 px-4 py-3 text-sm transition-colors"
                 >

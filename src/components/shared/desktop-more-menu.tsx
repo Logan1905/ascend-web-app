@@ -2,9 +2,18 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { LayoutGrid, Settings, Palette, Users, Github } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  LayoutGrid,
+  Settings,
+  Palette,
+  Users,
+  Github,
+  LogOut,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/components/providers/auth-provider";
 
 const menuItems = [
   { label: "Settings", href: "/settings", icon: Settings },
@@ -19,6 +28,8 @@ const menuItems = [
 ];
 
 export function DesktopMoreMenu() {
+  const router = useRouter();
+  const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -33,6 +44,12 @@ export function DesktopMoreMenu() {
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
+
+  async function handleSignOut() {
+    setOpen(false);
+    await signOut();
+    router.push("/profile");
+  }
 
   return (
     <div className="relative" ref={menuRef}>
@@ -76,6 +93,18 @@ export function DesktopMoreMenu() {
               </Link>
             );
           })}
+          {user && (
+            <>
+              <div className="border-border border-t" />
+              <button
+                onClick={handleSignOut}
+                className="text-destructive hover:bg-destructive/10 flex w-full items-center gap-3 px-4 py-2.5 text-sm transition-colors"
+              >
+                <LogOut className="size-4" />
+                Log out
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
