@@ -27,6 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/providers/auth-provider";
 import { createClient } from "@/lib/supabase/client";
+import { ToastModal } from "@/components/shared/toast-modal";
 
 // --- Static profile data ---
 
@@ -380,6 +381,7 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showSignInToast, setShowSignInToast] = useState(false);
 
   function resetForm() {
     setFullName("");
@@ -399,7 +401,11 @@ export default function ProfilePage() {
     setSubmitting(true);
     try {
       const { error } = await signIn(email, password);
-      if (error) setError(`Sign in failed: ${error}`);
+      if (error) {
+        setError(`Sign in failed: ${error}`);
+      } else {
+        setShowSignInToast(true);
+      }
     } catch (err: unknown) {
       setError(
         err instanceof Error ? err.message : "An unexpected error occurred.",
@@ -567,165 +573,178 @@ export default function ProfilePage() {
 
   // Login / Register form
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-4 py-8">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center">
-          <div className="bg-accent mx-auto mb-4 flex size-16 items-center justify-center rounded-full">
-            <User className="text-muted-foreground size-8" />
+    <>
+      <ToastModal
+        open={showSignInToast}
+        type="success"
+        title="Welcome back!"
+        message="You have signed in successfully."
+        autoClose={2000}
+        onClose={() => setShowSignInToast(false)}
+      />
+      <div className="flex flex-1 flex-col items-center justify-center px-4 py-8">
+        <div className="w-full max-w-sm space-y-6">
+          <div className="text-center">
+            <div className="bg-accent mx-auto mb-4 flex size-16 items-center justify-center rounded-full">
+              <User className="text-muted-foreground size-8" />
+            </div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {mode === "login" ? "Welcome back" : "Create an account"}
+            </h1>
+            <p className="text-muted-foreground mt-1 text-sm">
+              {mode === "login"
+                ? "Sign in to access your fitness data"
+                : "Get started on your fitness journey"}
+            </p>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {mode === "login" ? "Welcome back" : "Create an account"}
-          </h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            {mode === "login"
-              ? "Sign in to access your fitness data"
-              : "Get started on your fitness journey"}
-          </p>
-        </div>
-        {error && (
-          <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border px-4 py-3 text-sm">
-            {error}
-          </div>
-        )}
-        <div className="space-y-4">
-          {mode === "register" && (
+          {error && (
+            <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-lg border px-4 py-3 text-sm">
+              {error}
+            </div>
+          )}
+          <div className="space-y-4">
+            {mode === "register" && (
+              <div className="space-y-1.5">
+                <label htmlFor="name" className="text-sm font-medium">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <User className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                  <input
+                    id="name"
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="John Doe"
+                    className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border pr-3 pl-10 text-sm transition-colors outline-none focus:ring-2"
+                  />
+                </div>
+              </div>
+            )}
             <div className="space-y-1.5">
-              <label htmlFor="name" className="text-sm font-medium">
-                Full Name
+              <label htmlFor="email" className="text-sm font-medium">
+                Email
               </label>
               <div className="relative">
-                <User className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                <Mail className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
                 <input
-                  id="name"
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="John Doe"
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
                   className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border pr-3 pl-10 text-sm transition-colors outline-none focus:ring-2"
                 />
               </div>
             </div>
-          )}
-          <div className="space-y-1.5">
-            <label htmlFor="email" className="text-sm font-medium">
-              Email
-            </label>
-            <div className="relative">
-              <Mail className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border pr-3 pl-10 text-sm transition-colors outline-none focus:ring-2"
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label htmlFor="password" className="text-sm font-medium">
-                Password
-              </label>
-              {mode === "login" && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("forgot");
-                    resetForm();
-                    setEmail(email);
-                  }}
-                  className="text-primary text-xs font-medium hover:underline"
-                >
-                  Forgot password?
-                </button>
-              )}
-            </div>
-            <div className="relative">
-              <Lock className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-              <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border pr-10 pl-10 text-sm transition-colors outline-none focus:ring-2"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
-              >
-                {showPassword ? (
-                  <EyeOff className="size-4" />
-                ) : (
-                  <Eye className="size-4" />
-                )}
-              </button>
-            </div>
-          </div>
-          {mode === "register" && (
             <div className="space-y-1.5">
-              <label htmlFor="confirmPassword" className="text-sm font-medium">
-                Confirm Password
-              </label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="password" className="text-sm font-medium">
+                  Password
+                </label>
+                {mode === "login" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("forgot");
+                      resetForm();
+                      setEmail(email);
+                    }}
+                    className="text-primary text-xs font-medium hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                )}
+              </div>
               <div className="relative">
                 <Lock className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
                 <input
-                  id="confirmPassword"
+                  id="password"
                   type={showPassword ? "text" : "password"}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border pr-3 pl-10 text-sm transition-colors outline-none focus:ring-2"
+                  className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border pr-10 pl-10 text-sm transition-colors outline-none focus:ring-2"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
+                >
+                  {showPassword ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                </button>
               </div>
             </div>
-          )}
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={mode === "login" ? handleSignIn : handleSignUp}
-            className="bg-primary text-primary-foreground hover:bg-primary/80 h-9 w-full rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-          >
-            {submitting
-              ? "Please wait…"
-              : mode === "login"
-                ? "Sign In"
-                : "Create Account"}
-          </button>
+            {mode === "register" && (
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="confirmPassword"
+                  className="text-sm font-medium"
+                >
+                  Confirm Password
+                </label>
+                <div className="relative">
+                  <Lock className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                  <input
+                    id="confirmPassword"
+                    type={showPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border pr-3 pl-10 text-sm transition-colors outline-none focus:ring-2"
+                  />
+                </div>
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={mode === "login" ? handleSignIn : handleSignUp}
+              className="bg-primary text-primary-foreground hover:bg-primary/80 h-9 w-full rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {submitting
+                ? "Please wait…"
+                : mode === "login"
+                  ? "Sign In"
+                  : "Create Account"}
+            </button>
+          </div>
+          <p className="text-muted-foreground text-center text-sm">
+            {mode === "login" ? (
+              <>
+                Don&apos;t have an account?{" "}
+                <button
+                  onClick={() => {
+                    setMode("register");
+                    resetForm();
+                  }}
+                  className="text-primary font-medium hover:underline"
+                >
+                  Sign up
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{" "}
+                <button
+                  onClick={() => {
+                    setMode("login");
+                    resetForm();
+                  }}
+                  className="text-primary font-medium hover:underline"
+                >
+                  Sign in
+                </button>
+              </>
+            )}
+          </p>
         </div>
-        <p className="text-muted-foreground text-center text-sm">
-          {mode === "login" ? (
-            <>
-              Don&apos;t have an account?{" "}
-              <button
-                onClick={() => {
-                  setMode("register");
-                  resetForm();
-                }}
-                className="text-primary font-medium hover:underline"
-              >
-                Sign up
-              </button>
-            </>
-          ) : (
-            <>
-              Already have an account?{" "}
-              <button
-                onClick={() => {
-                  setMode("login");
-                  resetForm();
-                }}
-                className="text-primary font-medium hover:underline"
-              >
-                Sign in
-              </button>
-            </>
-          )}
-        </p>
       </div>
-    </div>
+    </>
   );
 }
 

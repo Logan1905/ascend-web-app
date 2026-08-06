@@ -31,6 +31,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmModal } from "@/components/shared/confirm-modal";
 import { useAuth } from "@/components/providers/auth-provider";
 import {
   deleteRoutine,
@@ -219,6 +220,7 @@ export default function RoutinesPage() {
 
   const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Routine | null>(null);
 
   const currentActiveId = routines.find((r) => r.isActive)?.id ?? null;
   const hasUnsavedSelection =
@@ -311,16 +313,19 @@ export default function RoutinesPage() {
   }
 
   async function handleDelete(routine: Routine) {
-    if (!window.confirm(`Delete "${routine.name}"? This cannot be undone.`))
-      return;
-    setBusyId(routine.id);
+    setDeleteTarget(routine);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setBusyId(deleteTarget.id);
     setError(null);
     try {
-      await deleteRoutine(routine.id);
-      if (pendingActiveId === routine.id) setPendingActiveId(null);
-      setRoutines((prev) => prev.filter((r) => r.id !== routine.id));
+      await deleteRoutine(deleteTarget.id);
+      if (pendingActiveId === deleteTarget.id) setPendingActiveId(null);
+      setRoutines((prev) => prev.filter((r) => r.id !== deleteTarget.id));
       originalOrderRef.current = originalOrderRef.current.filter(
-        (id) => id !== routine.id,
+        (id) => id !== deleteTarget.id,
       );
     } catch (err) {
       setError(
@@ -328,6 +333,7 @@ export default function RoutinesPage() {
       );
     } finally {
       setBusyId(null);
+      setDeleteTarget(null);
     }
   }
 
@@ -384,6 +390,17 @@ export default function RoutinesPage() {
           onDiscard={handleDiscardAll}
         />
       )}
+
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Delete Routine"
+        message={`Are you sure you want to delete "${deleteTarget?.name ?? ""}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+        loading={busyId === deleteTarget?.id}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-6">
         {/* Header */}
