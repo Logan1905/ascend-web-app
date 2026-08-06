@@ -8,20 +8,23 @@ import {
   Dumbbell,
   User,
   Settings,
-  Palette,
   Users,
   Github,
   LogOut,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 import { siteConfig } from "@/config/site";
 import { Button } from "@/components/ui/button";
 import { NotificationDropdown } from "@/components/shared/notification-dropdown";
 import { useAuth } from "@/components/providers/auth-provider";
+import { useTheme } from "@/components/providers/theme-provider";
 
 export function MobileTopBar() {
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -62,14 +65,32 @@ export function MobileTopBar() {
               <Settings className="size-4" />
               Settings
             </Link>
-            <Link
-              href="/settings#customization"
-              onClick={() => setMenuOpen(false)}
-              className="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-3 px-4 py-3 text-sm transition-colors"
-            >
-              <Palette className="size-4" />
-              Customization
-            </Link>
+            {/* Theme toggle */}
+            <div className="flex items-center gap-3 px-4 py-3">
+              <span className="text-muted-foreground text-sm">Theme</span>
+              <div className="border-border ml-auto flex items-center overflow-hidden rounded-full border">
+                <button
+                  onClick={toggleTheme}
+                  className={`flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                    theme === "light"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  <Sun className="size-3.5" />
+                </button>
+                <button
+                  onClick={toggleTheme}
+                  className={`flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                    theme === "dark"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  <Moon className="size-3.5" />
+                </button>
+              </div>
+            </div>
             <Link
               href="/friends"
               onClick={() => setMenuOpen(false)}

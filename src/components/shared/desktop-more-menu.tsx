@@ -6,30 +6,21 @@ import { useRouter } from "next/navigation";
 import {
   LayoutGrid,
   Settings,
-  Palette,
   Users,
   Github,
   LogOut,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/providers/auth-provider";
-
-const menuItems = [
-  { label: "Settings", href: "/settings", icon: Settings },
-  { label: "Customization", href: "/settings#customization", icon: Palette },
-  { label: "Friends", href: "/friends", icon: Users },
-  {
-    label: "GitHub",
-    href: "https://github.com/Logan1905/ascend-web-app",
-    icon: Github,
-    external: true,
-  },
-];
+import { useTheme } from "@/components/providers/theme-provider";
 
 export function DesktopMoreMenu() {
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -63,36 +54,63 @@ export function DesktopMoreMenu() {
       </Button>
 
       {open && (
-        <div className="border-border bg-popover absolute top-full left-0 mt-2 w-48 overflow-hidden rounded-lg border shadow-lg">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            if (item.external) {
-              return (
-                <a
-                  key={item.label}
-                  href={item.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setOpen(false)}
-                  className="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-3 px-4 py-2.5 text-sm transition-colors"
-                >
-                  <Icon className="size-4" />
-                  {item.label}
-                </a>
-              );
-            }
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-3 px-4 py-2.5 text-sm transition-colors"
+        <div className="border-border bg-popover absolute top-full left-0 mt-2 w-52 overflow-hidden rounded-lg border shadow-lg">
+          <Link
+            href="/settings"
+            onClick={() => setOpen(false)}
+            className="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-3 px-4 py-2.5 text-sm transition-colors"
+          >
+            <Settings className="size-4" />
+            Settings
+          </Link>
+
+          {/* Theme toggle */}
+          <div className="flex items-center gap-3 px-4 py-2.5">
+            <span className="text-muted-foreground text-sm">Theme</span>
+            <div className="border-border ml-auto flex items-center overflow-hidden rounded-full border">
+              <button
+                onClick={toggleTheme}
+                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                  theme === "light"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                aria-label="Light mode"
               >
-                <Icon className="size-4" />
-                {item.label}
-              </Link>
-            );
-          })}
+                <Sun className="size-3.5" />
+              </button>
+              <button
+                onClick={toggleTheme}
+                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                  theme === "dark"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                aria-label="Dark mode"
+              >
+                <Moon className="size-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <Link
+            href="/friends"
+            onClick={() => setOpen(false)}
+            className="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-3 px-4 py-2.5 text-sm transition-colors"
+          >
+            <Users className="size-4" />
+            Friends
+          </Link>
+          <a
+            href="https://github.com/Logan1905/ascend-web-app"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setOpen(false)}
+            className="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-3 px-4 py-2.5 text-sm transition-colors"
+          >
+            <Github className="size-4" />
+            GitHub
+          </a>
           {user && (
             <>
               <div className="border-border border-t" />
