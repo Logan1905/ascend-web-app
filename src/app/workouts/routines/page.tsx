@@ -39,6 +39,7 @@ import {
   setActiveRoutine,
   updateRoutineOrder,
 } from "@/lib/supabase/routines";
+import { withRetry } from "@/lib/utils/retry";
 import { DAYS_OF_WEEK, type Routine } from "@/types/routine";
 
 // --- Modal ---
@@ -242,7 +243,7 @@ export default function RoutinesPage() {
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchRoutines();
+        const data = await withRetry(() => fetchRoutines());
         if (!cancelled) {
           setRoutines(data);
           originalOrderRef.current = data.map((r) => r.id);

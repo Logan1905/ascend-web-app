@@ -7,6 +7,7 @@ import { Clock, StickyNote, CalendarDays, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/providers/auth-provider";
 import { fetchActiveRoutine, fetchRoutines } from "@/lib/supabase/routines";
+import { withRetry } from "@/lib/utils/retry";
 import {
   DAYS_OF_WEEK,
   getTodayDayOfWeek,
@@ -38,10 +39,9 @@ export default function WorkoutsPage() {
       setLoading(true);
       setError(null);
       try {
-        const [active, allRoutines] = await Promise.all([
-          fetchActiveRoutine(),
-          fetchRoutines(),
-        ]);
+        const [active, allRoutines] = await withRetry(() =>
+          Promise.all([fetchActiveRoutine(), fetchRoutines()]),
+        );
         if (!cancelled) {
           setRoutine(active);
           setHasRoutines(allRoutines.length > 0);
