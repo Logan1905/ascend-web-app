@@ -9,6 +9,7 @@ import { mainNavItems } from "@/config/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { NotificationDropdown } from "@/components/shared/notification-dropdown";
+import { DesktopMoreMenu } from "@/components/shared/desktop-more-menu";
 
 /**
  * Desktop header — hidden on mobile (mobile uses MobileTopBar + MobileBottomNav).
@@ -29,6 +30,9 @@ export function Header() {
 
         {/* Desktop Navigation */}
         <nav className="flex flex-1 items-center gap-1">
+          {/* More menu (dropdown) — left of Home */}
+          <DesktopMoreMenu />
+
           {mainNavItems.map((item) => {
             const isActive = pathname === item.href;
             return (
