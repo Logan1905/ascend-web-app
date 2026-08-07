@@ -123,6 +123,9 @@ export default function ProgressPage() {
   const [trackWeight, setTrackWeight] = useState("");
   const [trackUnit, setTrackUnit] = useState<WeightUnit>("lbs");
   const [savingWeight, setSavingWeight] = useState(false);
+  const [chartRange, setChartRange] = useState<"days" | "weeks" | "months">(
+    "days",
+  );
   const [toast, setToast] = useState<{
     type: "success" | "error";
     title: string;
@@ -222,14 +225,69 @@ export default function ProgressPage() {
 
   const graphMode: GraphMode = profile ? getGraphMode(profile.goal) : "neutral";
 
-  const chartData = useMemo(
-    () =>
-      entries.map((entry) => ({
-        label: shortDate(entry.loggedOn),
-        weight: fromLbs(entry.weightLbs, unit),
-      })),
-    [entries, unit],
-  );
+  const chartData = useMemo(() => {
+    if (entries.length === 0) return [];
+
+    const now = new Date();
+
+    if (chartRange === "days") {
+      // Last 30 days of entries, one point per day
+      const cutoff = new Date(now);
+      cutoff.setDate(cutoff.getDate() - 30);
+      return entries
+        .filter((e) => parseISODate(e.loggedOn) >= cutoff)
+        .map((entry) => ({
+          label: shortDate(entry.loggedOn),
+          weight: fromLbs(entry.weightLbs, unit),
+        }));
+    }
+
+    if (chartRange === "weeks") {
+      // Group entries by ISO week, average each week
+      const cutoff = new Date(now);
+      cutoff.setDate(cutoff.getDate() - 12 * 7); // ~12 weeks
+      const filtered = entries.filter(
+        (e) => parseISODate(e.loggedOn) >= cutoff,
+      );
+      const weekMap = new Map<string, number[]>();
+      for (const entry of filtered) {
+        const d = parseISODate(entry.loggedOn);
+        const weekStart = new Date(d);
+        weekStart.setDate(d.getDate() - d.getDay());
+        const key = `${weekStart.getMonth() + 1}/${weekStart.getDate()}`;
+        const existing = weekMap.get(key) ?? [];
+        existing.push(entry.weightLbs);
+        weekMap.set(key, existing);
+      }
+      return [...weekMap.entries()].map(([label, weights]) => ({
+        label,
+        weight: fromLbs(
+          weights.reduce((a, b) => a + b, 0) / weights.length,
+          unit,
+        ),
+      }));
+    }
+
+    // months — average per month
+    const monthMap = new Map<string, number[]>();
+    for (const entry of entries) {
+      const d = parseISODate(entry.loggedOn);
+      const key = d.toLocaleString(undefined, {
+        month: "short",
+        year: "2-digit",
+      });
+      const existing = monthMap.get(key) ?? [];
+      existing.push(entry.weightLbs);
+      monthMap.set(key, existing);
+    }
+    return [...monthMap.entries()].map(([label, weights]) => ({
+      label,
+      weight: fromLbs(
+        weights.reduce((a, b) => a + b, 0) / weights.length,
+        unit,
+      ),
+    }));
+  }, [entries, unit, chartRange]);
 
   /** Day-of-month -> logged weight + change vs the previous entry. */
   const calendarData = useMemo(() => {
@@ -416,9 +474,16 @@ export default function ProgressPage() {
       <div className="border-border bg-card rounded-xl border p-5">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-base font-semibold">Morning Weight</h2>
+            <div className="flex items-center gap-1.5">
+              <h2 className="text-base font-semibold">Morning Weight</h2>
+              {calendarData.has(currentDay) && (
+                <Check className="size-4 text-green-600 dark:text-green-400" />
+              )}
+            </div>
             <p className="text-muted-foreground mt-0.5 text-xs">
-              Track your fasted weight daily for accuracy.
+              {calendarData.has(currentDay)
+                ? "Successfully tracked morning weight"
+                : "Track your fasted weight daily for accuracy."}
             </p>
           </div>
           <button
@@ -427,9 +492,13 @@ export default function ProgressPage() {
               setTrackUnit(unit);
               setShowTrackModal(true);
             }}
-            className="bg-primary text-primary-foreground hover:bg-primary/80 shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+            className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+              calendarData.has(currentDay)
+                ? "border-border hover:bg-accent border"
+                : "bg-primary text-primary-foreground hover:bg-primary/80"
+            }`}
           >
-            Track
+            {calendarData.has(currentDay) ? "Edit" : "Track"}
           </button>
         </div>
       </div>
@@ -492,22 +561,41 @@ export default function ProgressPage() {
 
       {/* Weight chart */}
       <div className="border-border bg-card rounded-xl border p-5">
-        <div className="mb-4 flex items-center gap-2">
-          {graphMode === "gain" ? (
-            <TrendingUp className="size-5" style={{ color: accent }} />
-          ) : graphMode === "loss" ? (
-            <TrendingDown className="size-5" style={{ color: accent }} />
-          ) : (
-            <Activity className="size-5" style={{ color: accent }} />
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {graphMode === "gain" ? (
+              <TrendingUp className="size-5" style={{ color: accent }} />
+            ) : graphMode === "loss" ? (
+              <TrendingDown className="size-5" style={{ color: accent }} />
+            ) : (
+              <Activity className="size-5" style={{ color: accent }} />
+            )}
+            <h2 className="text-base font-semibold">
+              {getGraphTitle(graphMode)}
+            </h2>
+          </div>
+          {/* Range filter */}
+          {entries.length >= 3 && (
+            <div className="border-border flex overflow-hidden rounded-lg border text-xs font-medium">
+              {(["days", "weeks", "months"] as const).map((range) => (
+                <button
+                  key={range}
+                  onClick={() => setChartRange(range)}
+                  className={`px-2.5 py-1 capitalize transition-colors ${
+                    chartRange === range
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {range}
+                </button>
+              ))}
+            </div>
           )}
-          <h2 className="text-base font-semibold">
-            {getGraphTitle(graphMode)}
-          </h2>
         </div>
-        {chartData.length < 2 ? (
+        {entries.length < 3 ? (
           <p className="text-muted-foreground py-8 text-center text-sm">
-            Log your weight a couple of days in a row and your trend will show
-            up here.
+            Log at least 3 days to see your progress graph.
           </p>
         ) : (
           <div className="h-48 w-full">
