@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   User,
   Mail,
@@ -9,136 +9,106 @@ import {
   EyeOff,
   LogOut,
   CheckCircle2,
-  Calendar,
-  TrendingDown,
-  Check,
-  X,
+  ArrowRight,
+  ArrowLeft,
+  Sparkles,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/providers/auth-provider";
 import { createClient } from "@/lib/supabase/client";
 import { ToastModal } from "@/components/shared/toast-modal";
+import { createSignupProfile, fetchUserProfile } from "@/lib/supabase/profile";
+import {
+  formatBirthday,
+  formatHeight,
+  getAge,
+  type Country,
+  type HeightUnit,
+  type Sex,
+  type UserProfile,
+  COUNTRY_OPTIONS,
+} from "@/types/profile";
 
-// --- Static profile data ---
+// --- Months/days/years for birthday selectors ---
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+function daysInMonth(month: number, year: number): number {
+  return new Date(year, month, 0).getDate();
+}
+const currentYearNum = new Date().getFullYear();
+const YEARS = Array.from({ length: 100 }, (_, i) => currentYearNum - i);
 
-const profileData = {
-  name: "Logan Villarreal",
-  email: "loganv@gmail.com",
-  age: 22,
-  sex: "Male" as const,
-  birthday: "June 19, 2003",
-  goal: "Build Muscle" as const,
-  startingWeight: 165,
-  currentWeight: 172,
+// --- Sign-up onboarding wizard types ---
+type SignupStep =
+  "birthday" | "height" | "sex" | "name" | "country" | "credentials";
+
+interface SignupAnswers {
+  birthMonth: number;
+  birthDay: number;
+  birthYear: number;
+  height: string;
+  heightUnit: HeightUnit;
+  sex: Sex | null;
+  fullName: string;
+  country: Country | null;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}
+
+const INITIAL_ANSWERS: SignupAnswers = {
+  birthMonth: 1,
+  birthDay: 1,
+  birthYear: 2000,
+  height: "",
+  heightUnit: "in",
+  sex: null,
+  fullName: "",
+  country: null,
+  email: "",
+  password: "",
+  confirmPassword: "",
 };
 
-const weightProgress = [
-  { week: "W1", weight: 165 },
-  { week: "W2", weight: 165.8 },
-  { week: "W3", weight: 166.5 },
-  { week: "W4", weight: 167.2 },
-  { week: "W5", weight: 168.0 },
-  { week: "W6", weight: 169.1 },
-  { week: "W7", weight: 170.5 },
-  { week: "W8", weight: 171.0 },
-  { week: "W9", weight: 172.0 },
+const BASELINE_PROGRESS = 10;
+const SIGNUP_STEPS: SignupStep[] = [
+  "birthday",
+  "height",
+  "sex",
+  "name",
+  "country",
+  "credentials",
 ];
 
-// Calendar data: days with green (hit goals) or red (missed)
-const calendarData: Record<number, "green" | "red"> = {
-  1: "green",
-  2: "green",
-  3: "red",
-  4: "green",
-  5: "green",
-  6: "green",
-  7: "red",
-  8: "green",
-  9: "green",
-  10: "green",
-  11: "red",
-  12: "green",
-  13: "green",
-  14: "green",
-  15: "green",
-  16: "red",
-  17: "green",
-  18: "green",
-  19: "green",
-  20: "green",
-  21: "green",
-  22: "green",
-  23: "red",
-  24: "green",
-  25: "green",
-  26: "green",
-  27: "green",
-  28: "green",
-  29: "green",
-  30: "green",
-  31: "green",
-};
-
-const today = new Date();
-const currentDay = today.getDate();
-const currentMonth = today.toLocaleString("default", { month: "long" });
-const currentYear = today.getFullYear();
-const daysInMonth = new Date(currentYear, today.getMonth() + 1, 0).getDate();
-const firstDayOfWeek = new Date(currentYear, today.getMonth(), 1).getDay();
-
-const totalActiveDays = Object.keys(calendarData).length;
-const greenDays = Object.values(calendarData).filter(
-  (v) => v === "green",
-).length;
-const monthWeightChange =
-  profileData.currentWeight - profileData.startingWeight;
-
-// --- Custom Tooltip ---
-interface TooltipPayload {
-  value: number;
-}
-interface CustomTooltipProps {
-  active?: boolean;
-  payload?: TooltipPayload[];
-  label?: string;
-  unit?: string;
-}
-function CustomTooltip({ active, payload, label, unit }: CustomTooltipProps) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="border-border bg-popover rounded-lg border px-3 py-2 text-sm shadow-md">
-      <p className="font-medium">{label}</p>
-      <p className="text-muted-foreground">
-        {payload[0].value} {unit ?? ""}
-      </p>
-    </div>
-  );
-}
-
 // --- Profile View (shown when logged in) ---
-function ProfileView({ onSignOut }: { onSignOut: () => void }) {
-  const [weightUnit, setWeightUnit] = useState<"lbs" | "kg">("lbs");
-  const [heightUnit, setHeightUnit] = useState<"ft" | "cm">("ft");
+function ProfileView({
+  profile,
+  onSignOut,
+}: {
+  profile: UserProfile | null;
+  onSignOut: () => void;
+}) {
+  const { user } = useAuth();
+  const [heightUnit, setHeightUnit] = useState<HeightUnit>(
+    profile?.heightUnit ?? "in",
+  );
 
-  const convert = (lbs: number) =>
-    weightUnit === "kg" ? (lbs * 0.4536).toFixed(1) : lbs.toString();
-
-  const heightDisplay = heightUnit === "ft" ? "5'10\"" : "178 cm";
-
-  const weightChangeDisplay =
-    weightUnit === "kg"
-      ? `${monthWeightChange > 0 ? "+" : ""}${(monthWeightChange * 0.4536).toFixed(1)} kg`
-      : `${monthWeightChange > 0 ? "+" : ""}${monthWeightChange.toFixed(1)} lbs`;
+  const displayName =
+    (user?.user_metadata?.full_name as string | undefined) ?? "User";
+  const displayEmail = user?.email ?? "";
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-6">
@@ -149,8 +119,8 @@ function ProfileView({ onSignOut }: { onSignOut: () => void }) {
             <User className="text-muted-foreground size-8" />
           </div>
           <div className="flex-1">
-            <h1 className="text-xl font-bold">{profileData.name}</h1>
-            <p className="text-muted-foreground text-sm">{profileData.email}</p>
+            <h1 className="text-xl font-bold">{displayName}</h1>
+            <p className="text-muted-foreground text-sm">{displayEmail}</p>
           </div>
           <Button
             variant="outline"
@@ -164,194 +134,476 @@ function ProfileView({ onSignOut }: { onSignOut: () => void }) {
         </div>
 
         {/* Stats grid */}
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <div className="bg-muted/50 rounded-lg px-3 py-2">
-            <p className="text-muted-foreground text-xs">Age</p>
-            <p className="text-sm font-medium">{profileData.age}</p>
-          </div>
-          <div className="bg-muted/50 rounded-lg px-3 py-2">
-            <p className="text-muted-foreground text-xs">Height</p>
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-medium">{heightDisplay}</p>
-              <div className="border-border flex overflow-hidden rounded border text-[10px] font-medium">
-                <button
-                  onClick={() => setHeightUnit("ft")}
-                  className={`px-1.5 py-0.5 ${heightUnit === "ft" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                >
-                  ft
-                </button>
-                <button
-                  onClick={() => setHeightUnit("cm")}
-                  className={`px-1.5 py-0.5 ${heightUnit === "cm" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                >
-                  cm
-                </button>
+        {profile && (
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {profile.birthday && (
+              <div className="bg-muted/50 rounded-lg px-3 py-2">
+                <p className="text-muted-foreground text-xs">Age</p>
+                <p className="text-sm font-medium">
+                  {getAge(profile.birthday)}
+                </p>
               </div>
-            </div>
-          </div>
-          <div className="bg-muted/50 rounded-lg px-3 py-2">
-            <p className="text-muted-foreground text-xs">Sex</p>
-            <p className="text-sm font-medium">{profileData.sex}</p>
-          </div>
-          <div className="bg-muted/50 rounded-lg px-3 py-2">
-            <p className="text-muted-foreground text-xs">Birthday</p>
-            <p className="text-sm font-medium">{profileData.birthday}</p>
-          </div>
-          <div className="bg-muted/50 rounded-lg px-3 py-2">
-            <p className="text-muted-foreground text-xs">Goal</p>
-            <p className="text-sm font-medium">{profileData.goal}</p>
-          </div>
-          <div className="bg-muted/50 rounded-lg px-3 py-2">
-            <p className="text-muted-foreground text-xs">Weight</p>
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-medium">
-                {convert(profileData.currentWeight)} {weightUnit}
-              </p>
-              <div className="border-border flex overflow-hidden rounded border text-[10px] font-medium">
-                <button
-                  onClick={() => setWeightUnit("lbs")}
-                  className={`px-1.5 py-0.5 ${weightUnit === "lbs" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                >
-                  lbs
-                </button>
-                <button
-                  onClick={() => setWeightUnit("kg")}
-                  className={`px-1.5 py-0.5 ${weightUnit === "kg" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                >
-                  kg
-                </button>
+            )}
+            {profile.heightCm && (
+              <div className="bg-muted/50 rounded-lg px-3 py-2">
+                <p className="text-muted-foreground text-xs">Height</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium">
+                    {formatHeight(profile.heightCm, heightUnit)}
+                  </p>
+                  <div className="border-border flex overflow-hidden rounded border text-[10px] font-medium">
+                    <button
+                      onClick={() => setHeightUnit("in")}
+                      className={`px-1.5 py-0.5 ${heightUnit === "in" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                    >
+                      in
+                    </button>
+                    <button
+                      onClick={() => setHeightUnit("cm")}
+                      className={`px-1.5 py-0.5 ${heightUnit === "cm" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                    >
+                      cm
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
+            )}
 
-        {/* Starting / Current weight */}
-        <div className="mt-4 flex gap-4 text-sm">
-          <div>
-            <span className="text-muted-foreground">Starting: </span>
-            <span className="font-medium">
-              {convert(profileData.startingWeight)} {weightUnit}
-            </span>
+            {profile.sex && (
+              <div className="bg-muted/50 rounded-lg px-3 py-2">
+                <p className="text-muted-foreground text-xs">Sex</p>
+                <p className="text-sm font-medium capitalize">{profile.sex}</p>
+              </div>
+            )}
+            {profile.birthday && (
+              <div className="bg-muted/50 rounded-lg px-3 py-2">
+                <p className="text-muted-foreground text-xs">Birthday</p>
+                <p className="text-sm font-medium">
+                  {formatBirthday(profile.birthday)}
+                </p>
+              </div>
+            )}
+            {profile.country && (
+              <div className="bg-muted/50 rounded-lg px-3 py-2">
+                <p className="text-muted-foreground text-xs">Country</p>
+                <p className="text-sm font-medium">
+                  {COUNTRY_OPTIONS.find((c) => c.value === profile.country)
+                    ?.label ?? profile.country}
+                </p>
+              </div>
+            )}
           </div>
-          <div>
-            <span className="text-muted-foreground">Current: </span>
-            <span className="font-medium">
-              {convert(profileData.currentWeight)} {weightUnit}
-            </span>
-          </div>
-        </div>
+        )}
       </div>
+    </div>
+  );
+}
 
-      {/* Weight Progress Chart */}
-      <div className="border-border bg-card rounded-xl border p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <TrendingDown className="size-5 text-green-500" />
-          <h2 className="text-base font-semibold">Weight Progress</h2>
-        </div>
-        <div className="h-48 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
-              data={weightProgress.map((d) => ({
-                ...d,
-                weight:
-                  weightUnit === "kg"
-                    ? +(d.weight * 0.4536).toFixed(1)
-                    : d.weight,
-              }))}
-            >
-              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-              <XAxis
-                dataKey="week"
-                tick={{ fontSize: 12 }}
-                className="fill-muted-foreground"
-              />
-              <YAxis
-                domain={["dataMin - 1", "dataMax + 1"]}
-                tick={{ fontSize: 12 }}
-                className="fill-muted-foreground"
-              />
-              <Tooltip
-                content={<CustomTooltip unit={weightUnit} />}
-                cursor={false}
-              />
-              <Area
-                type="monotone"
-                dataKey="weight"
-                stroke="#22c55e"
-                fill="#22c55e"
-                fillOpacity={0.1}
-                strokeWidth={2}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+// --- Sign-up Onboarding Wizard ---
+function SignupWizard({ onComplete }: { onComplete: () => void }) {
+  const { signUp } = useAuth();
+  const [started, setStarted] = useState(false);
+  const [stepIndex, setStepIndex] = useState(0);
+  const [answers, setAnswers] = useState<SignupAnswers>(INITIAL_ANSWERS);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-      {/* Calendar */}
-      <div className="border-border bg-card rounded-xl border p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <Calendar className="text-muted-foreground size-5" />
-          <h2 className="text-base font-semibold">
-            {currentMonth} {currentYear}
-          </h2>
-        </div>
+  const step = SIGNUP_STEPS[stepIndex];
+  const isLastStep = stepIndex === SIGNUP_STEPS.length - 1;
+  const progress =
+    BASELINE_PROGRESS +
+    Math.round(
+      ((stepIndex + 1) / SIGNUP_STEPS.length) * (100 - BASELINE_PROGRESS),
+    );
 
-        {/* Day headers */}
-        <div className="text-muted-foreground mb-1 grid grid-cols-7 text-center text-xs font-medium">
-          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-            <div key={d} className="py-1">
-              {d}
+  function update(patch: Partial<SignupAnswers>) {
+    setAnswers((prev) => ({ ...prev, ...patch }));
+  }
+
+  const maxDay = useMemo(
+    () => daysInMonth(answers.birthMonth, answers.birthYear),
+    [answers.birthMonth, answers.birthYear],
+  );
+
+  // Use the clamped value everywhere — the select onChange will write it back
+  const effectiveBirthDay = Math.min(answers.birthDay, maxDay);
+
+  const canContinue = (() => {
+    switch (step) {
+      case "birthday":
+        return true; // always valid — defaults are set
+      case "height":
+        return answers.height.trim().length > 0 && Number(answers.height) > 0;
+      case "sex":
+        return answers.sex !== null;
+      case "name":
+        return answers.fullName.trim().length > 0;
+      case "country":
+        return answers.country !== null;
+      case "credentials":
+        return (
+          answers.email.trim().length > 0 &&
+          answers.password.length >= 6 &&
+          answers.password === answers.confirmPassword
+        );
+    }
+  })();
+
+  async function handleNext() {
+    if (!canContinue) return;
+    setError(null);
+
+    if (!isLastStep) {
+      setStepIndex((i) => i + 1);
+      return;
+    }
+
+    // Last step — create account
+    setSubmitting(true);
+    try {
+      const { error: signUpErr } = await signUp(
+        answers.email.trim(),
+        answers.password,
+        answers.fullName.trim(),
+      );
+      if (signUpErr) {
+        setError(signUpErr);
+        setSubmitting(false);
+        return;
+      }
+
+      // Build birthday ISO string
+      const month = String(answers.birthMonth).padStart(2, "0");
+      const day = String(effectiveBirthDay).padStart(2, "0");
+      const birthday = `${answers.birthYear}-${month}-${day}`;
+
+      // Convert height to cm
+      const rawHeight = Number(answers.height);
+      const heightCm =
+        answers.heightUnit === "cm" ? rawHeight : rawHeight * 2.54;
+
+      await createSignupProfile({
+        birthday,
+        heightCm,
+        heightUnit: answers.heightUnit,
+        sex: answers.sex!,
+        country: answers.country!,
+      });
+
+      onComplete();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handlePrevious() {
+    if (stepIndex === 0) {
+      setStarted(false);
+      return;
+    }
+    setStepIndex((i) => i - 1);
+  }
+
+  // --- Intro screen ---
+  if (!started) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center px-4 py-8">
+        <div className="w-full max-w-sm">
+          <div className="border-border bg-card rounded-xl border p-6">
+            <div className="bg-primary/10 mb-4 flex size-11 items-center justify-center rounded-full">
+              <Sparkles className="text-primary size-5" />
             </div>
-          ))}
-        </div>
-
-        {/* Calendar grid */}
-        <div className="grid grid-cols-7 gap-1">
-          {/* Empty cells for days before the 1st */}
-          {Array.from({ length: firstDayOfWeek }).map((_, i) => (
-            <div key={`empty-${i}`} className="aspect-square" />
-          ))}
-          {/* Day cells */}
-          {Array.from({ length: daysInMonth }).map((_, i) => {
-            const day = i + 1;
-            const isToday = day === currentDay;
-            const status = calendarData[day];
-            return (
-              <div
-                key={day}
-                className={`flex aspect-square flex-col items-center justify-center gap-0.5 rounded-md text-xs font-medium ${
-                  isToday
-                    ? "bg-blue-500/20 text-blue-700 ring-2 ring-blue-500 dark:text-blue-300"
-                    : status === "green"
-                      ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                      : status === "red"
-                        ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                        : "text-muted-foreground"
-                }`}
-              >
-                <span className="text-[10px] leading-none">{day}</span>
-                {status === "green" && <Check className="size-3" />}
-                {status === "red" && <X className="size-3" />}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Calendar stats */}
-        <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-          <div className="bg-muted/50 rounded-lg px-2 py-2">
-            <p className="text-lg font-bold">{totalActiveDays}</p>
-            <p className="text-muted-foreground text-[10px]">Active Days</p>
-          </div>
-          <div className="bg-muted/50 rounded-lg px-2 py-2">
-            <p className="text-lg font-bold text-green-600">
-              {greenDays}/{daysInMonth}
+            <h1 className="text-2xl font-bold tracking-tight">
+              Let&apos;s get to know you
+            </h1>
+            <p className="text-muted-foreground mt-3 text-sm leading-relaxed">
+              A few quick questions to personalize your experience. Takes less
+              than a minute.
             </p>
-            <p className="text-muted-foreground text-[10px]">Green Days</p>
+            <button
+              onClick={() => setStarted(true)}
+              aria-label="Start"
+              className="bg-primary text-primary-foreground hover:bg-primary/80 mt-6 flex size-12 items-center justify-center rounded-full transition-colors"
+            >
+              <ArrowRight className="size-5" />
+            </button>
           </div>
-          <div className="bg-muted/50 rounded-lg px-2 py-2">
-            <p className="text-lg font-bold">{weightChangeDisplay}</p>
-            <p className="text-muted-foreground text-[10px]">Weight</p>
+          <p className="text-muted-foreground mt-4 text-center text-sm">
+            Already have an account?{" "}
+            <button
+              onClick={onComplete}
+              className="text-primary font-medium hover:underline"
+            >
+              Sign in
+            </button>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Question screens ---
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center px-4 py-8">
+      <div className="w-full max-w-sm">
+        <div className="border-border bg-card rounded-xl border p-5">
+          {/* Progress bar */}
+          <div className="mb-6">
+            <div className="text-muted-foreground mb-1.5 flex items-center justify-between text-xs font-medium">
+              <span>
+                Step {stepIndex + 1} of {SIGNUP_STEPS.length}
+              </span>
+              <span>{progress}%</span>
+            </div>
+            <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
+              <div
+                className="bg-primary h-full rounded-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+
+          {step === "birthday" && (
+            <div>
+              <h2 className="text-lg font-semibold">When is your birthday?</h2>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-muted-foreground mb-1 block text-xs">
+                    Month
+                  </label>
+                  <select
+                    value={answers.birthMonth}
+                    onChange={(e) =>
+                      update({ birthMonth: Number(e.target.value) })
+                    }
+                    className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border px-2 text-sm outline-none focus:ring-2"
+                  >
+                    {MONTHS.map((m, i) => (
+                      <option key={m} value={i + 1}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-muted-foreground mb-1 block text-xs">
+                    Day
+                  </label>
+                  <select
+                    value={effectiveBirthDay}
+                    onChange={(e) =>
+                      update({ birthDay: Number(e.target.value) })
+                    }
+                    className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border px-2 text-sm outline-none focus:ring-2"
+                  >
+                    {Array.from({ length: maxDay }, (_, i) => i + 1).map(
+                      (d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-muted-foreground mb-1 block text-xs">
+                    Year
+                  </label>
+                  <select
+                    value={answers.birthYear}
+                    onChange={(e) =>
+                      update({ birthYear: Number(e.target.value) })
+                    }
+                    className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border px-2 text-sm outline-none focus:ring-2"
+                  >
+                    {YEARS.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === "height" && (
+            <div>
+              <h2 className="text-lg font-semibold">How tall are you?</h2>
+              <div className="mt-4 flex gap-2">
+                <input
+                  type="number"
+                  step="0.1"
+                  inputMode="decimal"
+                  value={answers.height}
+                  onChange={(e) => update({ height: e.target.value })}
+                  placeholder={answers.heightUnit === "in" ? "70" : "178"}
+                  aria-label={`Height in ${answers.heightUnit === "in" ? "inches" : "cm"}`}
+                  className="border-input bg-background placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20 h-12 flex-1 rounded-lg border px-4 text-lg font-medium outline-none focus:ring-2"
+                />
+                <div className="border-border flex overflow-hidden rounded-lg border text-sm font-medium">
+                  {(["in", "cm"] as const).map((u) => (
+                    <button
+                      key={u}
+                      onClick={() => update({ heightUnit: u })}
+                      className={`px-3 transition-colors ${
+                        answers.heightUnit === u
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-accent"
+                      }`}
+                    >
+                      {u}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {answers.heightUnit === "in" && (
+                <p className="text-muted-foreground mt-2 text-xs">
+                  Enter total inches (e.g. 70 = 5&apos;10&quot;)
+                </p>
+              )}
+            </div>
+          )}
+
+          {step === "sex" && (
+            <div>
+              <h2 className="text-lg font-semibold">What is your sex?</h2>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {(["male", "female"] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => update({ sex: s })}
+                    aria-pressed={answers.sex === s}
+                    className={`rounded-lg border px-4 py-3 text-sm font-medium capitalize transition-colors ${
+                      answers.sex === s
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border hover:bg-accent"
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === "name" && (
+            <div>
+              <h2 className="text-lg font-semibold">What&apos;s your name?</h2>
+              <input
+                type="text"
+                value={answers.fullName}
+                onChange={(e) => update({ fullName: e.target.value })}
+                placeholder="John Doe"
+                className="border-input bg-background placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20 mt-4 h-12 w-full rounded-lg border px-4 text-lg font-medium outline-none focus:ring-2"
+              />
+            </div>
+          )}
+
+          {step === "country" && (
+            <div>
+              <h2 className="text-lg font-semibold">Where are you from?</h2>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {COUNTRY_OPTIONS.map((c) => (
+                  <button
+                    key={c.value}
+                    onClick={() => update({ country: c.value })}
+                    aria-pressed={answers.country === c.value}
+                    className={`rounded-lg border px-4 py-3 text-sm font-medium transition-colors ${
+                      answers.country === c.value
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border hover:bg-accent"
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === "credentials" && (
+            <div>
+              <h2 className="text-lg font-semibold">Create your account</h2>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Last step — pick an email and password.
+              </p>
+              <div className="mt-4 space-y-3">
+                <div className="relative">
+                  <Mail className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    value={answers.email}
+                    onChange={(e) => update({ email: e.target.value })}
+                    placeholder="you@example.com"
+                    className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border pr-3 pl-10 text-sm outline-none focus:ring-2"
+                  />
+                </div>
+
+                <div className="relative">
+                  <Lock className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={answers.password}
+                    onChange={(e) => update({ password: e.target.value })}
+                    placeholder="Password (min 6 chars)"
+                    className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border pr-10 pl-10 text-sm outline-none focus:ring-2"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="size-4" />
+                    ) : (
+                      <Eye className="size-4" />
+                    )}
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={answers.confirmPassword}
+                    onChange={(e) =>
+                      update({ confirmPassword: e.target.value })
+                    }
+                    placeholder="Confirm password"
+                    className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border pr-3 pl-10 text-sm outline-none focus:ring-2"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {error && <p className="text-destructive mt-4 text-sm">{error}</p>}
+
+          {/* Navigation */}
+          <div className="mt-6 flex gap-3">
+            <button
+              onClick={handlePrevious}
+              className="border-border hover:bg-accent flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors"
+            >
+              <ArrowLeft className="size-4" />
+              Previous
+            </button>
+            <button
+              onClick={handleNext}
+              disabled={!canContinue || submitting}
+              className="bg-primary text-primary-foreground hover:bg-primary/80 flex flex-1 items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {submitting
+                ? "Creating…"
+                : isLastStep
+                  ? "Create Account"
+                  : "Next"}
+              {!isLastStep && !submitting && <ArrowRight className="size-4" />}
+            </button>
           </div>
         </div>
       </div>
@@ -363,9 +615,8 @@ function ProfileView({ onSignOut }: { onSignOut: () => void }) {
 export default function ProfilePage() {
   const {
     user,
-    loading,
+    loading: authLoading,
     signIn,
-    signUp,
     signOut,
     isRecovery,
     clearRecovery,
@@ -374,20 +625,44 @@ export default function ProfilePage() {
 
   const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [showPassword, setShowPassword] = useState(false);
-  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showSignInToast, setShowSignInToast] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+
+  const loadProfile = useCallback(async () => {
+    try {
+      const p = await fetchUserProfile();
+      setProfile(p);
+    } catch {
+      // Not critical for the page to load
+    } finally {
+      setProfileLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (authLoading) return;
+    let cancelled = false;
+    void (async () => {
+      if (!user) {
+        if (!cancelled) setProfileLoading(false);
+        return;
+      }
+      await loadProfile();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, authLoading, loadProfile]);
 
   function resetForm() {
-    setFullName("");
     setEmail("");
     setPassword("");
-    setConfirmPassword("");
     setError(null);
     setSuccess(null);
   }
@@ -406,37 +681,6 @@ export default function ProfilePage() {
       } else {
         setShowSignInToast(true);
       }
-    } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "An unexpected error occurred.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleSignUp() {
-    setError(null);
-    if (!email || !password) {
-      setError("Please fill in all required fields.");
-      return;
-    }
-    if (!fullName.trim()) {
-      setError("Please enter your name.");
-      return;
-    }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const { error } = await signUp(email, password, fullName.trim());
-      if (error) setError(`Sign up failed: ${error}`);
     } catch (err: unknown) {
       setError(
         err instanceof Error ? err.message : "An unexpected error occurred.",
@@ -477,7 +721,7 @@ export default function ProfilePage() {
     }
   }
 
-  if (loading) {
+  if (authLoading || (user && profileLoading)) {
     return (
       <div className="flex flex-1 items-center justify-center px-4 py-8">
         <p className="text-muted-foreground text-sm">Loading…</p>
@@ -498,7 +742,19 @@ export default function ProfilePage() {
 
   // Logged in — show profile
   if (user) {
-    return <ProfileView onSignOut={signOut} />;
+    return <ProfileView profile={profile} onSignOut={signOut} />;
+  }
+
+  // Sign-up wizard
+  if (mode === "register") {
+    return (
+      <SignupWizard
+        onComplete={() => {
+          setMode("login");
+          setShowSignInToast(true);
+        }}
+      />
+    );
   }
 
   // Forgot password view
@@ -571,7 +827,7 @@ export default function ProfilePage() {
     );
   }
 
-  // Login / Register form
+  // Login form
   return (
     <>
       <ToastModal
@@ -589,12 +845,10 @@ export default function ProfilePage() {
               <User className="text-muted-foreground size-8" />
             </div>
             <h1 className="text-2xl font-semibold tracking-tight">
-              {mode === "login" ? "Welcome back" : "Create an account"}
+              Welcome back
             </h1>
             <p className="text-muted-foreground mt-1 text-sm">
-              {mode === "login"
-                ? "Sign in to access your fitness data"
-                : "Get started on your fitness journey"}
+              Sign in to access your fitness data
             </p>
           </div>
           {error && (
@@ -603,24 +857,6 @@ export default function ProfilePage() {
             </div>
           )}
           <div className="space-y-4">
-            {mode === "register" && (
-              <div className="space-y-1.5">
-                <label htmlFor="name" className="text-sm font-medium">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <User className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-                  <input
-                    id="name"
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="John Doe"
-                    className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border pr-3 pl-10 text-sm transition-colors outline-none focus:ring-2"
-                  />
-                </div>
-              </div>
-            )}
             <div className="space-y-1.5">
               <label htmlFor="email" className="text-sm font-medium">
                 Email
@@ -637,24 +873,23 @@ export default function ProfilePage() {
                 />
               </div>
             </div>
+
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label htmlFor="password" className="text-sm font-medium">
                   Password
                 </label>
-                {mode === "login" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode("forgot");
-                      resetForm();
-                      setEmail(email);
-                    }}
-                    className="text-primary text-xs font-medium hover:underline"
-                  >
-                    Forgot password?
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("forgot");
+                    resetForm();
+                    setEmail(email);
+                  }}
+                  className="text-primary text-xs font-medium hover:underline"
+                >
+                  Forgot password?
+                </button>
               </div>
               <div className="relative">
                 <Lock className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
@@ -679,68 +914,26 @@ export default function ProfilePage() {
                 </button>
               </div>
             </div>
-            {mode === "register" && (
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="confirmPassword"
-                  className="text-sm font-medium"
-                >
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <Lock className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-                  <input
-                    id="confirmPassword"
-                    type={showPassword ? "text" : "password"}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="border-input bg-background focus:border-ring focus:ring-ring/20 h-10 w-full rounded-lg border pr-3 pl-10 text-sm transition-colors outline-none focus:ring-2"
-                  />
-                </div>
-              </div>
-            )}
             <button
               type="button"
               disabled={submitting}
-              onClick={mode === "login" ? handleSignIn : handleSignUp}
+              onClick={handleSignIn}
               className="bg-primary text-primary-foreground hover:bg-primary/80 h-9 w-full rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
             >
-              {submitting
-                ? "Please wait…"
-                : mode === "login"
-                  ? "Sign In"
-                  : "Create Account"}
+              {submitting ? "Please wait…" : "Sign In"}
             </button>
           </div>
           <p className="text-muted-foreground text-center text-sm">
-            {mode === "login" ? (
-              <>
-                Don&apos;t have an account?{" "}
-                <button
-                  onClick={() => {
-                    setMode("register");
-                    resetForm();
-                  }}
-                  className="text-primary font-medium hover:underline"
-                >
-                  Sign up
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{" "}
-                <button
-                  onClick={() => {
-                    setMode("login");
-                    resetForm();
-                  }}
-                  className="text-primary font-medium hover:underline"
-                >
-                  Sign in
-                </button>
-              </>
-            )}
+            Don&apos;t have an account?{" "}
+            <button
+              onClick={() => {
+                setMode("register");
+                resetForm();
+              }}
+              className="text-primary font-medium hover:underline"
+            >
+              Sign up
+            </button>
           </p>
         </div>
       </div>
@@ -835,6 +1028,7 @@ function ResetPasswordForm({
             {error}
           </div>
         )}
+
         <div className="space-y-4">
           <div className="space-y-1.5">
             <label htmlFor="new-password" className="text-sm font-medium">
@@ -890,7 +1084,6 @@ function ResetPasswordForm({
         </div>
         <p className="text-muted-foreground text-center text-sm">
           <button
-            type="button"
             onClick={onSignInInstead}
             className="text-primary font-medium hover:underline"
           >

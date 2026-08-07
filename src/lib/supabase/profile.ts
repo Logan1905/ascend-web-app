@@ -1,7 +1,10 @@
 import { createClient } from "@/lib/supabase/client";
 import { withRetry } from "@/lib/utils/retry";
 import type {
+  Country,
   FitnessGoal,
+  HeightUnit,
+  Sex,
   UserProfile,
   UserProfileDraft,
   WeightEntry,
@@ -30,6 +33,11 @@ interface ProfileRow {
   goal_custom: string | null;
   workout_frequency: string;
   onboarded: boolean;
+  birthday: string | null;
+  height_cm: number | string | null;
+  height_unit: string;
+  sex: string | null;
+  country: string | null;
 }
 
 interface WeightEntryRow {
@@ -54,6 +62,11 @@ function mapProfile(row: ProfileRow): UserProfile {
     goalCustom: row.goal_custom,
     workoutFrequency: row.workout_frequency as WorkoutFrequency,
     onboarded: row.onboarded,
+    birthday: row.birthday,
+    heightCm: row.height_cm === null ? null : num(row.height_cm),
+    heightUnit: row.height_unit as HeightUnit,
+    sex: row.sex as Sex | null,
+    country: row.country as Country | null,
   };
 }
 
@@ -74,7 +87,12 @@ const PROFILE_SELECT = `
   goal,
   goal_custom,
   workout_frequency,
-  onboarded
+  onboarded,
+  birthday,
+  height_cm,
+  height_unit,
+  sex,
+  country
 `;
 
 /** Today's date as a local-time ISO date string (YYYY-MM-DD). */
@@ -224,4 +242,79 @@ export async function addWeightEntry(weightLbs: number): Promise<WeightEntry> {
   if (profileError) throw new Error(profileError.message);
 
   return mapWeightEntry(data as WeightEntryRow);
+}
+
+/** Data collected during sign-up onboarding (before the progress onboarding). */
+export interface SignupProfileData {
+  birthday: string; // ISO date
+  heightCm: number;
+  heightUnit: HeightUnit;
+  sex: Sex;
+  country: Country;
+}
+
+/**
+ * Creates the initial user_profiles row with sign-up details.
+ * The progress onboarding will later fill in weight/goal/frequency.
+ * If the row already exists this is a no-op.
+ */
+export async function createSignupProfile(
+  data: SignupProfileData,
+): Promise<void> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError) throw new Error(userError.message);
+  if (!user) throw new Error("You must be signed in.");
+
+  // Insert with placeholder weight; progress onboarding will overwrite.
+  const { error } = await supabase.from("user_profiles").upsert(
+    {
+      user_id: user.id,
+      current_weight: 0,
+      starting_weight: 0,
+      weight_unit: "lbs",
+      goal: "build_muscle",
+      workout_frequency: "3-4",
+      onboarded: false,
+      birthday: data.birthday,
+      height_cm: data.heightCm,
+      height_unit: data.heightUnit,
+      sex: data.sex,
+      country: data.country,
+    },
+    { onConflict: "user_id", ignoreDuplicates: true },
+  );
+
+  if (error) throw new Error(error.message);
+}
+
+/** Updates the personal detail fields on an existing profile. */
+export async function updateProfileDetails(
+  data: SignupProfileData,
+): Promise<void> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
+
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({
+      birthday: data.birthday,
+      height_cm: data.heightCm,
+      height_unit: data.heightUnit,
+      sex: data.sex,
+      country: data.country,
+    })
+    .eq("user_id", user.id);
+
+  if (error) throw new Error(error.message);
 }

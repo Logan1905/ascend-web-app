@@ -10,6 +10,9 @@
  */
 
 export type WeightUnit = "lbs" | "kg";
+export type HeightUnit = "in" | "cm";
+export type Sex = "male" | "female";
+export type Country = "US" | "MX";
 
 export type FitnessGoal =
   "build_muscle" | "lose_weight" | "maintain_weight" | "gain_weight" | "other";
@@ -35,6 +38,14 @@ export interface UserProfile {
   goalCustom: string | null;
   workoutFrequency: WorkoutFrequency;
   onboarded: boolean;
+  /** ISO date string, e.g. "2003-06-19". */
+  birthday: string | null;
+  /** Height stored in centimeters. */
+  heightCm: number | null;
+  /** Preferred height display unit. */
+  heightUnit: HeightUnit;
+  sex: Sex | null;
+  country: Country | null;
 }
 
 /** The payload used when saving onboarding answers. */
@@ -79,6 +90,14 @@ export const FREQUENCY_OPTIONS: ReadonlyArray<{
   { value: "everyday", label: "Every day" },
   { value: "varies", label: "It varies" },
   { value: "never", label: "Never" },
+];
+
+export const COUNTRY_OPTIONS: ReadonlyArray<{
+  value: Country;
+  label: string;
+}> = [
+  { value: "US", label: "USA" },
+  { value: "MX", label: "Mexico" },
 ];
 
 // --- Helpers ---
@@ -130,4 +149,42 @@ export function fromLbs(lbs: number, unit: WeightUnit): number {
 export function toLbs(value: number, unit: WeightUnit): number {
   const lbs = unit === "kg" ? value * LBS_PER_KG : value;
   return Math.round(lbs * 100) / 100;
+}
+
+/** Converts centimeters to a display string in the given unit. */
+export function formatHeight(cm: number, unit: HeightUnit): string {
+  if (unit === "cm") return `${Math.round(cm)} cm`;
+  const totalInches = cm / 2.54;
+  const feet = Math.floor(totalInches / 12);
+  const inches = Math.round(totalInches % 12);
+  return `${feet}'${inches}"`;
+}
+
+/** Converts a height input to centimeters for storage. */
+export function toCm(value: number, unit: HeightUnit): number {
+  if (unit === "cm") return value;
+  // value is in total inches
+  return value * 2.54;
+}
+
+/** Computes age from a birthday ISO string. */
+export function getAge(birthday: string): number {
+  const birth = new Date(birthday + "T00:00:00");
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+}
+
+/** Formats an ISO date string like "June 19, 2003". */
+export function formatBirthday(iso: string): string {
+  const date = new Date(iso + "T00:00:00");
+  return date.toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 }
