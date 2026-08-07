@@ -373,7 +373,7 @@ export default function ProgressPage() {
     );
   }
 
-  if (!profile) {
+  if (!profile || !profile.onboarded) {
     return (
       <>
         <OnboardingWizard onComplete={handleOnboardingComplete} />

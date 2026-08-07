@@ -59,7 +59,9 @@ interface SignupAnswers {
   birthMonth: number;
   birthDay: number;
   birthYear: number;
-  height: string;
+  heightFeet: string;
+  heightInches: string;
+  heightCm: string;
   heightUnit: HeightUnit;
   sex: Sex | null;
   fullName: string;
@@ -73,7 +75,9 @@ const INITIAL_ANSWERS: SignupAnswers = {
   birthMonth: 1,
   birthDay: 1,
   birthYear: 2000,
-  height: "",
+  heightFeet: "",
+  heightInches: "",
+  heightCm: "",
   heightUnit: "in",
   sex: null,
   fullName: "",
@@ -234,7 +238,14 @@ function SignupWizard({ onComplete }: { onComplete: () => void }) {
       case "birthday":
         return true; // always valid — defaults are set
       case "height":
-        return answers.height.trim().length > 0 && Number(answers.height) > 0;
+        if (answers.heightUnit === "cm") {
+          return (
+            answers.heightCm.trim().length > 0 && Number(answers.heightCm) > 0
+          );
+        }
+        return (
+          answers.heightFeet.trim().length > 0 && Number(answers.heightFeet) > 0
+        );
       case "sex":
         return answers.sex !== null;
       case "name":
@@ -279,9 +290,14 @@ function SignupWizard({ onComplete }: { onComplete: () => void }) {
       const birthday = `${answers.birthYear}-${month}-${day}`;
 
       // Convert height to cm
-      const rawHeight = Number(answers.height);
-      const heightCm =
-        answers.heightUnit === "cm" ? rawHeight : rawHeight * 2.54;
+      let heightCm: number;
+      if (answers.heightUnit === "cm") {
+        heightCm = Number(answers.heightCm);
+      } else {
+        const feet = Number(answers.heightFeet) || 0;
+        const inches = Number(answers.heightInches) || 0;
+        heightCm = (feet * 12 + inches) * 2.54;
+      }
 
       await createSignupProfile({
         birthday,
@@ -317,11 +333,11 @@ function SignupWizard({ onComplete }: { onComplete: () => void }) {
               <Sparkles className="text-primary size-5" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight">
-              Let&apos;s get to know you
+              Your fitness journey starts here
             </h1>
             <p className="text-muted-foreground mt-3 text-sm leading-relaxed">
-              A few quick questions to personalize your experience. Takes less
-              than a minute.
+              We&apos;ll personalize everything — your goals, your progress
+              charts, and your insights — based on a few quick answers. Ready?
             </p>
             <button
               onClick={() => setStarted(true)}
@@ -434,38 +450,72 @@ function SignupWizard({ onComplete }: { onComplete: () => void }) {
           {step === "height" && (
             <div>
               <h2 className="text-lg font-semibold">How tall are you?</h2>
-              <div className="mt-4 flex gap-2">
-                <input
-                  type="number"
-                  step="0.1"
-                  inputMode="decimal"
-                  value={answers.height}
-                  onChange={(e) => update({ height: e.target.value })}
-                  placeholder={answers.heightUnit === "in" ? "70" : "178"}
-                  aria-label={`Height in ${answers.heightUnit === "in" ? "inches" : "cm"}`}
-                  className="border-input bg-background placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20 h-12 flex-1 rounded-lg border px-4 text-lg font-medium outline-none focus:ring-2"
-                />
-                <div className="border-border flex overflow-hidden rounded-lg border text-sm font-medium">
+              <div className="mt-4">
+                {/* Unit toggle */}
+                <div className="border-border mb-3 flex w-fit overflow-hidden rounded-lg border text-sm font-medium">
                   {(["in", "cm"] as const).map((u) => (
                     <button
                       key={u}
                       onClick={() => update({ heightUnit: u })}
-                      className={`px-3 transition-colors ${
+                      className={`px-3 py-1.5 transition-colors ${
                         answers.heightUnit === u
                           ? "bg-primary text-primary-foreground"
                           : "text-muted-foreground hover:bg-accent"
                       }`}
                     >
-                      {u}
+                      {u === "in" ? "ft / in" : "cm"}
                     </button>
                   ))}
                 </div>
+
+                {answers.heightUnit === "in" ? (
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <label className="text-muted-foreground mb-1 block text-xs">
+                        Feet
+                      </label>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min="1"
+                        max="8"
+                        value={answers.heightFeet}
+                        onChange={(e) => update({ heightFeet: e.target.value })}
+                        placeholder="5"
+                        className="border-input bg-background placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20 h-12 w-full rounded-lg border px-4 text-lg font-medium outline-none focus:ring-2"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-muted-foreground mb-1 block text-xs">
+                        Inches
+                      </label>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min="0"
+                        max="11"
+                        value={answers.heightInches}
+                        onChange={(e) =>
+                          update({ heightInches: e.target.value })
+                        }
+                        placeholder="10"
+                        className="border-input bg-background placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20 h-12 w-full rounded-lg border px-4 text-lg font-medium outline-none focus:ring-2"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <input
+                    type="number"
+                    step="0.1"
+                    inputMode="decimal"
+                    value={answers.heightCm}
+                    onChange={(e) => update({ heightCm: e.target.value })}
+                    placeholder="178"
+                    aria-label="Height in cm"
+                    className="border-input bg-background placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20 h-12 w-full rounded-lg border px-4 text-lg font-medium outline-none focus:ring-2"
+                  />
+                )}
               </div>
-              {answers.heightUnit === "in" && (
-                <p className="text-muted-foreground mt-2 text-xs">
-                  Enter total inches (e.g. 70 = 5&apos;10&quot;)
-                </p>
-              )}
             </div>
           )}
 
@@ -751,7 +801,6 @@ export default function ProfilePage() {
       <SignupWizard
         onComplete={() => {
           setMode("login");
-          setShowSignInToast(true);
         }}
       />
     );

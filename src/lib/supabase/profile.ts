@@ -163,7 +163,11 @@ export async function saveUserProfile(
   const payload = {
     user_id: user.id,
     current_weight: draft.currentWeight,
-    starting_weight: existing?.startingWeight ?? draft.currentWeight,
+    // Keep the original starting weight once a real one is set.
+    starting_weight:
+      existing && existing.startingWeight > 0
+        ? existing.startingWeight
+        : draft.currentWeight,
     goal_weight: draft.goalWeight,
     weight_unit: draft.weightUnit,
     goal: draft.goal,
