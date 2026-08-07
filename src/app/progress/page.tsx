@@ -368,9 +368,9 @@ export default function ProgressPage() {
         </div>
 
         {/* Calendar grid */}
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-1.5">
           {Array.from({ length: firstDayOfWeek }).map((_, i) => (
-            <div key={`empty-${i}`} className="aspect-square" />
+            <div key={`empty-${i}`} />
           ))}
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
@@ -383,30 +383,55 @@ export default function ProgressPage() {
             return (
               <div
                 key={day}
-                className={`flex aspect-square flex-col items-center justify-center gap-0 rounded-md text-[10px] font-medium ${
+                className={`flex flex-col items-center justify-between rounded-lg px-1 py-1.5 sm:py-2 ${
                   isToday
-                    ? "bg-blue-500/20 text-blue-700 ring-2 ring-blue-500 dark:text-blue-300"
+                    ? "bg-blue-500/15 ring-2 ring-blue-500"
                     : dayData?.status === "green"
-                      ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                      ? "bg-green-100 dark:bg-green-900/30"
                       : dayData?.status === "red"
-                        ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                        : "text-muted-foreground"
+                        ? "bg-red-100 dark:bg-red-900/30"
+                        : "bg-muted/30"
                 }`}
               >
-                <span className="leading-none">{day}</span>
-                {isToday ? (
-                  <div className="mt-0.5 size-1.5 rounded-full bg-blue-500" />
-                ) : dayData?.status === "green" ? (
-                  <Check className="mt-0.5 size-2.5" />
-                ) : dayData?.status === "red" ? (
-                  <X className="mt-0.5 size-2.5" />
-                ) : null}
-                {wChange !== null && (
+                {/* Day number */}
+                <span
+                  className={`text-[11px] leading-none font-semibold ${
+                    isToday
+                      ? "text-blue-700 dark:text-blue-300"
+                      : dayData?.status === "green"
+                        ? "text-green-700 dark:text-green-400"
+                        : dayData?.status === "red"
+                          ? "text-red-700 dark:text-red-400"
+                          : "text-muted-foreground"
+                  }`}
+                >
+                  {day}
+                </span>
+
+                {/* Status icon */}
+                <div className="my-1">
+                  {isToday ? (
+                    <div className="size-2 rounded-full bg-blue-500" />
+                  ) : dayData?.status === "green" ? (
+                    <Check className="size-3 text-green-600 dark:text-green-400" />
+                  ) : dayData?.status === "red" ? (
+                    <X className="size-3 text-red-500 dark:text-red-400" />
+                  ) : (
+                    <div className="size-3" />
+                  )}
+                </div>
+
+                {/* Weight change */}
+                {wChange !== null ? (
                   <span
-                    className={`leading-none ${(dayData?.weightChange ?? 0) >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}
+                    className={`text-[9px] leading-none font-medium ${(dayData?.weightChange ?? 0) >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}
                   >
                     {(dayData?.weightChange ?? 0) >= 0 ? "+" : ""}
                     {wChange}
+                  </span>
+                ) : (
+                  <span className="text-[9px] leading-none text-transparent">
+                    —
                   </span>
                 )}
               </div>
