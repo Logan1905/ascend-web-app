@@ -141,6 +141,9 @@ function CustomTooltip({ active, payload, label, unit }: CustomTooltipProps) {
 
 export default function ProgressPage() {
   const [unit, setUnit] = useState<"lbs" | "kg">("lbs");
+  const [showTrackModal, setShowTrackModal] = useState(false);
+  const [trackWeight, setTrackWeight] = useState("");
+  const [trackUnit, setTrackUnit] = useState<"lbs" | "kg">("lbs");
 
   const convert = (lbs: number) => (unit === "kg" ? toKg(lbs) : toLbs(lbs));
   const convertChange = (lbs: number) =>
@@ -211,6 +214,88 @@ export default function ProgressPage() {
           </div>
         </div>
       </div>
+
+      {/* Track morning weight */}
+      <div className="border-border bg-card rounded-xl border p-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold">Morning Weight</h2>
+            <p className="text-muted-foreground mt-0.5 text-xs">
+              Track your fasted weight daily for accuracy.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setTrackWeight("");
+              setTrackUnit(unit);
+              setShowTrackModal(true);
+            }}
+            className="bg-primary text-primary-foreground hover:bg-primary/80 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+          >
+            Track
+          </button>
+        </div>
+      </div>
+
+      {/* Track weight modal */}
+      {showTrackModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div
+            className="bg-background/60 absolute inset-0 backdrop-blur-sm"
+            onClick={() => setShowTrackModal(false)}
+          />
+          <div className="border-border bg-card relative w-full max-w-sm rounded-xl border p-6 shadow-lg">
+            <h2 className="text-xl font-bold">Track Weight</h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Weigh yourself first thing in the morning for best results.
+            </p>
+
+            <div className="mt-5 flex gap-2">
+              <input
+                type="number"
+                step="0.1"
+                value={trackWeight}
+                onChange={(e) => setTrackWeight(e.target.value)}
+                placeholder={trackUnit === "lbs" ? "172.0" : "78.0"}
+                className="border-input bg-background placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20 h-12 flex-1 rounded-lg border px-4 text-lg font-medium transition-colors outline-none focus:ring-2"
+                autoFocus
+              />
+              <div className="border-border flex overflow-hidden rounded-lg border text-sm font-medium">
+                <button
+                  onClick={() => setTrackUnit("lbs")}
+                  className={`px-3 py-2 transition-colors ${trackUnit === "lbs" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"}`}
+                >
+                  lbs
+                </button>
+                <button
+                  onClick={() => setTrackUnit("kg")}
+                  className={`px-3 py-2 transition-colors ${trackUnit === "kg" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"}`}
+                >
+                  kg
+                </button>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                // TODO: save to database later
+                setShowTrackModal(false);
+              }}
+              disabled={!trackWeight}
+              className="bg-primary text-primary-foreground hover:bg-primary/80 mt-4 h-11 w-full rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              Save
+            </button>
+
+            <button
+              onClick={() => setShowTrackModal(false)}
+              className="text-muted-foreground hover:text-foreground mt-2 w-full text-center text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Weight chart */}
       <div className="border-border bg-card rounded-xl border p-5">
