@@ -45,6 +45,7 @@ export const userProfileDraftSchema = z
       .max(100, "Keep it under 100 characters.")
       .nullable(),
     workoutFrequency: workoutFrequencySchema,
+    trackWorkouts: z.boolean(),
   })
   .refine((draft) => draft.goal !== "other" || !!draft.goalCustom, {
     message: "Tell us a bit about your goal.",

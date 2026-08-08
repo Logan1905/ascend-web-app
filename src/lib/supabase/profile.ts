@@ -32,6 +32,7 @@ interface ProfileRow {
   goal: string;
   goal_custom: string | null;
   workout_frequency: string;
+  track_workouts: boolean;
   onboarded: boolean;
   birthday: string | null;
   height_cm: number | string | null;
@@ -61,6 +62,7 @@ function mapProfile(row: ProfileRow): UserProfile {
     goal: row.goal as FitnessGoal,
     goalCustom: row.goal_custom,
     workoutFrequency: row.workout_frequency as WorkoutFrequency,
+    trackWorkouts: row.track_workouts ?? false,
     onboarded: row.onboarded,
     birthday: row.birthday,
     heightCm: row.height_cm === null ? null : num(row.height_cm),
@@ -87,6 +89,7 @@ const PROFILE_SELECT = `
   goal,
   goal_custom,
   workout_frequency,
+  track_workouts,
   onboarded,
   birthday,
   height_cm,
@@ -173,6 +176,7 @@ export async function saveUserProfile(
     goal: draft.goal,
     goal_custom: draft.goal === "other" ? draft.goalCustom : null,
     workout_frequency: draft.workoutFrequency,
+    track_workouts: draft.trackWorkouts,
     onboarded: true,
   };
 
@@ -188,6 +192,28 @@ export async function saveUserProfile(
   await addWeightEntry(draft.currentWeight);
 
   return mapProfile(data as ProfileRow);
+}
+
+/**
+ * Toggles workout tracking on its own.
+ * Used by the Settings tab so the preference can change without re-running
+ * the whole Progress setup.
+ */
+export async function updateTrackWorkouts(enabled: boolean): Promise<void> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) throw new Error("You must be signed in.");
+
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({ track_workouts: enabled })
+    .eq("user_id", user.id);
+
+  if (error) throw new Error(error.message);
 }
 
 /** Stores the user's preferred display unit so it persists across visits. */
@@ -284,6 +310,7 @@ export async function createSignupProfile(
       weight_unit: "lbs",
       goal: "build_muscle",
       workout_frequency: "3-4",
+      track_workouts: false,
       onboarded: false,
       birthday: data.birthday,
       height_cm: data.heightCm,

@@ -8,6 +8,7 @@ import { parseWeightInput } from "@/schemas/profile";
 import {
   FREQUENCY_OPTIONS,
   GOAL_OPTIONS,
+  TRACK_WORKOUTS_OPTIONS,
   goalNeedsTargetWeight,
   toLbs,
   type FitnessGoal,
@@ -27,7 +28,7 @@ import {
 /** Progress bar starts here so step one never feels like square zero. */
 const BASELINE_PROGRESS = 15;
 
-type StepId = "weight" | "goal" | "goalWeight" | "frequency";
+type StepId = "weight" | "goal" | "goalWeight" | "frequency" | "trackWorkouts";
 
 interface Answers {
   currentWeight: string;
@@ -37,6 +38,7 @@ interface Answers {
   goalWeight: string;
   goalWeightUnit: WeightUnit;
   frequency: WorkoutFrequency | null;
+  trackWorkouts: boolean | null;
 }
 
 const initialAnswers: Answers = {
@@ -47,6 +49,7 @@ const initialAnswers: Answers = {
   goalWeight: "",
   goalWeightUnit: "lbs",
   frequency: null,
+  trackWorkouts: null,
 };
 
 interface OnboardingWizardProps {
@@ -65,7 +68,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   const steps = useMemo<StepId[]>(() => {
     const base: StepId[] = ["weight", "goal"];
     if (goalNeedsTargetWeight(answers.goal)) base.push("goalWeight");
-    base.push("frequency");
+    base.push("frequency", "trackWorkouts");
     return base;
   }, [answers.goal]);
 
@@ -95,6 +98,8 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
         return parseWeightInput(answers.goalWeight) !== null;
       case "frequency":
         return answers.frequency !== null;
+      case "trackWorkouts":
+        return answers.trackWorkouts !== null;
     }
   })();
 
@@ -117,7 +122,12 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 
   async function handleSave() {
     const currentWeight = parseWeightInput(answers.currentWeight);
-    if (currentWeight === null || !answers.goal || !answers.frequency) {
+    if (
+      currentWeight === null ||
+      !answers.goal ||
+      !answers.frequency ||
+      answers.trackWorkouts === null
+    ) {
       setShowConfirm(false);
       setError("Something's missing. Please check your answers.");
       return;
@@ -142,6 +152,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
         goal: answers.goal,
         goalCustom: answers.goal === "other" ? answers.goalCustom.trim() : null,
         workoutFrequency: answers.frequency,
+        trackWorkouts: answers.trackWorkouts,
       });
       setShowConfirm(false);
     } catch (err) {
@@ -261,6 +272,25 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                   label={option.label}
                   selected={answers.frequency === option.value}
                   onClick={() => update({ frequency: option.value })}
+                />
+              ))}
+            </div>
+          </Question>
+        )}
+
+        {step === "trackWorkouts" && (
+          <Question title="Track your workouts?">
+            <p className="text-muted-foreground -mt-2 mb-4 text-sm">
+              Log your sets and reps as you train. You can turn this on or off
+              later in settings.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {TRACK_WORKOUTS_OPTIONS.map((option) => (
+                <OptionButton
+                  key={option.label}
+                  label={option.label}
+                  selected={answers.trackWorkouts === option.value}
+                  onClick={() => update({ trackWorkouts: option.value })}
                 />
               ))}
             </div>

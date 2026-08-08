@@ -37,6 +37,8 @@ export interface UserProfile {
   /** Free-text goal, only set when `goal` is "other". */
   goalCustom: string | null;
   workoutFrequency: WorkoutFrequency;
+  /** Whether the user opted into workout tracking during Progress setup. */
+  trackWorkouts: boolean;
   onboarded: boolean;
   /** ISO date string, e.g. "2003-06-19". */
   birthday: string | null;
@@ -56,6 +58,7 @@ export interface UserProfileDraft {
   goal: FitnessGoal;
   goalCustom: string | null;
   workoutFrequency: WorkoutFrequency;
+  trackWorkouts: boolean;
 }
 
 /** A single logged morning weight. */
@@ -98,6 +101,14 @@ export const COUNTRY_OPTIONS: ReadonlyArray<{
 }> = [
   { value: "US", label: "USA" },
   { value: "MX", label: "Mexico" },
+];
+
+export const TRACK_WORKOUTS_OPTIONS: ReadonlyArray<{
+  value: boolean;
+  label: string;
+}> = [
+  { value: true, label: "Yes" },
+  { value: false, label: "Maybe Later" },
 ];
 
 // --- Helpers ---

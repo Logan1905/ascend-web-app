@@ -25,6 +25,7 @@ import {
 } from "recharts";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { useProfile } from "@/components/providers/profile-provider";
 import { OnboardingWizard } from "@/components/shared/onboarding-wizard";
 import { ToastModal } from "@/components/shared/toast-modal";
 import {
@@ -112,6 +113,7 @@ function CustomTooltip({ active, payload, label, unit }: CustomTooltipProps) {
 
 export default function ProgressPage() {
   const { user, loading: authLoading } = useAuth();
+  const { refresh: refreshSharedProfile } = useProfile();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [entries, setEntries] = useState<WeightEntry[]>([]);
@@ -190,6 +192,8 @@ export default function ProgressPage() {
   async function handleOnboardingComplete(draft: UserProfileDraft) {
     await saveUserProfile(draft);
     await load();
+    // Keep the app-wide copy (and trackWorkouts) current.
+    await refreshSharedProfile();
     setToast({
       type: "success",
       title: "You're all set!",
