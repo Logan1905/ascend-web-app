@@ -6,6 +6,7 @@ import { Clock, StickyNote, CalendarDays, Moon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/providers/auth-provider";
+import { useSelectedDate } from "@/components/providers/date-provider";
 import { fetchActiveRoutine, fetchRoutines } from "@/lib/supabase/routines";
 import { withRetry } from "@/lib/utils/retry";
 import {
@@ -24,6 +25,7 @@ function getGreeting(): string {
 
 export default function WorkoutsPage() {
   const { user, loading: authLoading } = useAuth();
+  const { selectedDate, isToday } = useSelectedDate();
 
   const [routine, setRoutine] = useState<Routine | null>(null);
   const [hasRoutines, setHasRoutines] = useState(false);
@@ -66,10 +68,13 @@ export default function WorkoutsPage() {
     (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ??
     "there";
 
-  const todayDayOfWeek = getTodayDayOfWeek();
-  const todayName = DAYS_OF_WEEK.find((d) => d.value === todayDayOfWeek)!.label;
+  // Which weekday the globally selected date falls on.
+  const selectedDayOfWeek = getTodayDayOfWeek(selectedDate);
+  const todayName = DAYS_OF_WEEK.find(
+    (d) => d.value === selectedDayOfWeek,
+  )!.label;
   const today: RoutineDay | undefined = routine?.days.find(
-    (d) => d.dayOfWeek === todayDayOfWeek,
+    (d) => d.dayOfWeek === selectedDayOfWeek,
   );
 
   return (
@@ -81,7 +86,9 @@ export default function WorkoutsPage() {
             {getGreeting()}
             {user ? `, ${firstName}` : ""}
           </h1>
-          <p className="text-muted-foreground mt-1">Today&apos;s workout:</p>
+          <p className="text-muted-foreground mt-1">
+            {isToday ? "Today's workout:" : `${todayName}'s workout:`}
+          </p>
         </div>
         <Link href="/workouts/routines">
           <Button variant="outline" size="sm" className="shrink-0 gap-1.5">
@@ -146,7 +153,9 @@ export default function WorkoutsPage() {
           <Moon className="text-muted-foreground size-8" />
           <p className="text-lg font-semibold">Rest Day</p>
           <p className="text-muted-foreground text-sm">
-            Enjoy your recovery — {todayName} is a rest day.
+            {isToday
+              ? `Enjoy your recovery — ${todayName} is a rest day.`
+              : `${todayName} is a rest day.`}
           </p>
         </div>
       )}

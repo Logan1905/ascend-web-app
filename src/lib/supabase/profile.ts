@@ -235,10 +235,16 @@ export async function updateWeightUnit(unit: WeightUnit): Promise<void> {
 }
 
 /**
- * Logs a morning weight for today, replacing any earlier entry for the same
- * day, and keeps the profile's current weight in sync.
+ * Logs a morning weight for a given date (today by default), replacing any
+ * earlier entry for that same date.
+ *
+ * `user_profiles.current_weight` is then resynced from the most recent entry,
+ * so back-filling an older date never clobbers a newer reading.
  */
-export async function addWeightEntry(weightLbs: number): Promise<WeightEntry> {
+export async function addWeightEntry(
+  weightLbs: number,
+  dateISO: string = localToday(),
+): Promise<WeightEntry> {
   const supabase = createClient();
 
   const {
@@ -255,7 +261,7 @@ export async function addWeightEntry(weightLbs: number): Promise<WeightEntry> {
       {
         user_id: user.id,
         weight_lbs: weightLbs,
-        logged_on: localToday(),
+        logged_on: dateISO,
       },
       { onConflict: "user_id,logged_on" },
     )
@@ -264,9 +270,22 @@ export async function addWeightEntry(weightLbs: number): Promise<WeightEntry> {
 
   if (error) throw new Error(error.message);
 
+  // The newest entry defines the profile's current weight, whichever date the
+  // user happened to be editing.
+  const { data: latest, error: latestError } = await supabase
+    .from("weight_entries")
+    .select("weight_lbs")
+    .order("logged_on", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestError) throw new Error(latestError.message);
+
+  const currentWeight = latest ? num(latest.weight_lbs) : weightLbs;
+
   const { error: profileError } = await supabase
     .from("user_profiles")
-    .update({ current_weight: weightLbs })
+    .update({ current_weight: currentWeight })
     .eq("user_id", user.id);
 
   if (profileError) throw new Error(profileError.message);

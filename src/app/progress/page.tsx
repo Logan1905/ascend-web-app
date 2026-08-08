@@ -26,6 +26,7 @@ import {
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { useProfile } from "@/components/providers/profile-provider";
+import { useSelectedDate } from "@/components/providers/date-provider";
 import { OnboardingWizard } from "@/components/shared/onboarding-wizard";
 import { ToastModal } from "@/components/shared/toast-modal";
 import {
@@ -36,6 +37,7 @@ import {
   updateWeightUnit,
 } from "@/lib/supabase/profile";
 import { parseWeightInput } from "@/schemas/profile";
+import { toISODate } from "@/lib/utils/date";
 import {
   fromLbs,
   getGoalLabel,
@@ -114,6 +116,7 @@ function CustomTooltip({ active, payload, label, unit }: CustomTooltipProps) {
 export default function ProgressPage() {
   const { user, loading: authLoading } = useAuth();
   const { refresh: refreshSharedProfile } = useProfile();
+  const { selectedDate, isToday } = useSelectedDate();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [entries, setEntries] = useState<WeightEntry[]>([]);
@@ -207,7 +210,8 @@ export default function ProgressPage() {
 
     setSavingWeight(true);
     try {
-      await addWeightEntry(toLbs(value, trackUnit));
+      // Always writes to the globally selected date, never to "today".
+      await addWeightEntry(toLbs(value, trackUnit), toISODate(selectedDate));
       await load();
       setShowTrackModal(false);
       setToast({ type: "success", title: "Weight logged" });
@@ -229,16 +233,34 @@ export default function ProgressPage() {
 
   const graphMode: GraphMode = profile ? getGraphMode(profile.goal) : "neutral";
 
-  const chartData = useMemo(() => {
-    if (entries.length === 0) return [];
+  const selectedISO = toISODate(selectedDate);
 
-    const now = new Date();
+  /**
+   * Everything on this page reads "as of" the selected date: entries logged
+   * after it are excluded, so viewing Aug 6 never reveals Aug 7's weight.
+   */
+  const visibleEntries = useMemo(
+    () => entries.filter((entry) => entry.loggedOn <= selectedISO),
+    [entries, selectedISO],
+  );
+
+  /** The entry logged on the selected date, if there is one. */
+  const selectedEntry = useMemo(
+    () => entries.find((entry) => entry.loggedOn === selectedISO) ?? null,
+    [entries, selectedISO],
+  );
+
+  const chartData = useMemo(() => {
+    if (visibleEntries.length === 0) return [];
+
+    // Ranges are measured back from the selected date, not the real today.
+    const now = selectedDate;
 
     if (chartRange === "days") {
       // Last 30 days of entries, one point per day
       const cutoff = new Date(now);
       cutoff.setDate(cutoff.getDate() - 30);
-      return entries
+      return visibleEntries
         .filter((e) => parseISODate(e.loggedOn) >= cutoff)
         .map((entry) => ({
           label: shortDate(entry.loggedOn),
@@ -250,7 +272,7 @@ export default function ProgressPage() {
       // Group entries by ISO week, average each week
       const cutoff = new Date(now);
       cutoff.setDate(cutoff.getDate() - 12 * 7); // ~12 weeks
-      const filtered = entries.filter(
+      const filtered = visibleEntries.filter(
         (e) => parseISODate(e.loggedOn) >= cutoff,
       );
       const weekMap = new Map<string, number[]>();
@@ -274,7 +296,7 @@ export default function ProgressPage() {
 
     // months — average per month
     const monthMap = new Map<string, number[]>();
-    for (const entry of entries) {
+    for (const entry of visibleEntries) {
       const d = parseISODate(entry.loggedOn);
       const key = d.toLocaleString(undefined, {
         month: "short",
@@ -291,22 +313,24 @@ export default function ProgressPage() {
         unit,
       ),
     }));
-  }, [entries, unit, chartRange]);
+  }, [visibleEntries, unit, chartRange, selectedDate]);
 
-  /** Day-of-month -> logged weight + change vs the previous entry. */
+  /**
+   * Day-of-month -> logged weight + change vs the previous entry, for the
+   * month the selected date falls in.
+   */
   const calendarData = useMemo(() => {
-    const now = new Date();
     const map = new Map<number, { weightLbs: number; change: number }>();
 
-    entries.forEach((entry, index) => {
+    visibleEntries.forEach((entry, index) => {
       const date = parseISODate(entry.loggedOn);
       if (
-        date.getMonth() !== now.getMonth() ||
-        date.getFullYear() !== now.getFullYear()
+        date.getMonth() !== selectedDate.getMonth() ||
+        date.getFullYear() !== selectedDate.getFullYear()
       ) {
         return;
       }
-      const previous = entries[index - 1];
+      const previous = visibleEntries[index - 1];
       map.set(date.getDate(), {
         weightLbs: entry.weightLbs,
         change: previous ? entry.weightLbs - previous.weightLbs : 0,
@@ -314,14 +338,24 @@ export default function ProgressPage() {
     });
 
     return map;
-  }, [entries]);
+  }, [visibleEntries, selectedDate]);
 
-  const today = new Date();
-  const currentDay = today.getDate();
-  const currentMonth = today.toLocaleString(undefined, { month: "long" });
-  const currentYear = today.getFullYear();
-  const daysInMonth = new Date(currentYear, today.getMonth() + 1, 0).getDate();
-  const firstDayOfWeek = new Date(currentYear, today.getMonth(), 1).getDay();
+  // The calendar follows the selected date's month.
+  const currentDay = selectedDate.getDate();
+  const currentMonth = selectedDate.toLocaleString(undefined, {
+    month: "long",
+  });
+  const currentYear = selectedDate.getFullYear();
+  const daysInMonth = new Date(
+    currentYear,
+    selectedDate.getMonth() + 1,
+    0,
+  ).getDate();
+  const firstDayOfWeek = new Date(
+    currentYear,
+    selectedDate.getMonth(),
+    1,
+  ).getDay();
 
   const loggedDays = calendarData.size;
   const onTrackDays = [...calendarData.values()].filter((d) =>
@@ -331,7 +365,7 @@ export default function ProgressPage() {
     loggedDays > 0 ? Math.round((onTrackDays / loggedDays) * 100) : 0;
   const weeksTracked = Math.max(1, Math.ceil(currentDay / 7));
 
-  /** Change since the first entry logged this month. */
+  /** Change across the selected month, up to the selected date. */
   const monthlyChange = useMemo(() => {
     const monthEntries = [...calendarData.entries()].sort(
       (a, b) => a[0] - b[0],
@@ -341,6 +375,17 @@ export default function ProgressPage() {
     const last = monthEntries[monthEntries.length - 1][1].weightLbs;
     return last - first;
   }, [calendarData, profile]);
+
+  /**
+   * Weight as it stood on the selected date: the most recent reading on or
+   * before it, falling back to the profile when nothing has been logged yet.
+   */
+  const weightAsOfSelected = useMemo(() => {
+    if (visibleEntries.length > 0) {
+      return visibleEntries[visibleEntries.length - 1].weightLbs;
+    }
+    return profile?.currentWeight ?? 0;
+  }, [visibleEntries, profile]);
 
   // --- Gates ---
 
@@ -399,7 +444,7 @@ export default function ProgressPage() {
 
   const accent = ACCENT[graphMode];
   const showProgressBar = goalNeedsTargetWeight(profile.goal);
-  const difference = profile.currentWeight - profile.startingWeight;
+  const difference = weightAsOfSelected - profile.startingWeight;
 
   const totalRange = profile.goalWeight
     ? Math.abs(profile.goalWeight - profile.startingWeight)
@@ -450,7 +495,7 @@ export default function ProgressPage() {
         </div>
         <div className="mt-3 flex flex-wrap items-baseline gap-2">
           <span className="text-3xl font-bold">
-            {convert(profile.currentWeight)}
+            {convert(weightAsOfSelected)}
           </span>
           <span className="text-muted-foreground text-sm">{unit}</span>
           {monthlyChange !== 0 && (
@@ -480,29 +525,36 @@ export default function ProgressPage() {
           <div>
             <div className="flex items-center gap-1.5">
               <h2 className="text-base font-semibold">Morning Weight</h2>
-              {calendarData.has(currentDay) && (
+              {selectedEntry && (
                 <Check className="size-4 text-green-600 dark:text-green-400" />
               )}
             </div>
             <p className="text-muted-foreground mt-0.5 text-xs">
-              {calendarData.has(currentDay)
+              {selectedEntry
                 ? "Successfully tracked morning weight"
-                : "Track your fasted weight daily for accuracy."}
+                : isToday
+                  ? "Track your fasted weight daily for accuracy."
+                  : "No weight recorded for this day."}
             </p>
           </div>
           <button
             onClick={() => {
-              setTrackWeight("");
+              // Pre-fill when editing an existing entry for this date.
+              setTrackWeight(
+                selectedEntry
+                  ? String(fromLbs(selectedEntry.weightLbs, unit))
+                  : "",
+              );
               setTrackUnit(unit);
               setShowTrackModal(true);
             }}
             className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-              calendarData.has(currentDay)
+              selectedEntry
                 ? "border-border hover:bg-accent border"
                 : "bg-primary text-primary-foreground hover:bg-primary/80"
             }`}
           >
-            {calendarData.has(currentDay) ? "Edit" : "Track"}
+            {selectedEntry ? "Edit" : "Track"}
           </button>
         </div>
       </div>
@@ -579,7 +631,7 @@ export default function ProgressPage() {
             </h2>
           </div>
           {/* Range filter */}
-          {entries.length >= 3 && (
+          {visibleEntries.length >= 3 && (
             <div className="border-border flex overflow-hidden rounded-lg border text-xs font-medium">
               {(["days", "weeks", "months"] as const).map((range) => (
                 <button
@@ -597,7 +649,7 @@ export default function ProgressPage() {
             </div>
           )}
         </div>
-        {entries.length < 3 ? (
+        {visibleEntries.length < 3 ? (
           <p className="text-muted-foreground py-8 text-center text-sm">
             Log at least 3 days to see your progress graph.
           </p>
@@ -652,7 +704,7 @@ export default function ProgressPage() {
           </div>
           <div>
             <p className="text-lg font-bold">
-              {convert(profile.currentWeight)}{" "}
+              {convert(weightAsOfSelected)}{" "}
               <span className="text-muted-foreground text-xs font-normal">
                 {unit}
               </span>
@@ -687,7 +739,7 @@ export default function ProgressPage() {
                 {convert(profile.startingWeight)} {unit}
               </span>
               <span className="text-foreground font-medium">
-                {convert(profile.currentWeight)} {unit}
+                {convert(weightAsOfSelected)} {unit}
               </span>
               <span>
                 {convert(profile.goalWeight)} {unit}
@@ -765,7 +817,8 @@ export default function ProgressPage() {
           ))}
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
-            const isToday = day === currentDay;
+            // Highlights the selected day rather than the real current day.
+            const isSelectedDay = day === currentDay;
             const dayData = calendarData.get(day);
             // Neutral goals get no good/bad colouring at all.
             const status = !dayData
@@ -780,7 +833,7 @@ export default function ProgressPage() {
               <div
                 key={day}
                 className={`flex flex-col items-center justify-between rounded-lg px-1 py-1.5 sm:py-2 ${
-                  isToday
+                  isSelectedDay
                     ? "bg-blue-500/15 ring-2 ring-blue-500"
                     : status === "good"
                       ? "bg-green-100 dark:bg-green-900/30"
@@ -794,7 +847,7 @@ export default function ProgressPage() {
                 {/* Day number */}
                 <span
                   className={`text-[11px] leading-none font-semibold ${
-                    isToday
+                    isSelectedDay
                       ? "text-blue-700 dark:text-blue-300"
                       : status === "good"
                         ? "text-green-700 dark:text-green-400"
@@ -810,7 +863,7 @@ export default function ProgressPage() {
 
                 {/* Status icon */}
                 <div className="my-1">
-                  {isToday ? (
+                  {isSelectedDay ? (
                     <div className="size-2 rounded-full bg-blue-500" />
                   ) : status === "good" ? (
                     <Check className="size-3 text-green-600 dark:text-green-400" />

@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { Droplets, Flame, TrendingDown } from "lucide-react";
+
+import { useAuth } from "@/components/providers/auth-provider";
+import { useSelectedDate } from "@/components/providers/date-provider";
 import {
   AreaChart,
   Area,
@@ -15,8 +18,9 @@ import {
 } from "recharts";
 
 // --- Static data ---
+// NOTE: these figures are still placeholders. Once nutrition and water logging
+// exist they should be read for the selected date.
 
-const userName = "Logan";
 const dailyCalorieGoal = 2200;
 const dailyCaloriesConsumed = 1845;
 
@@ -103,9 +107,22 @@ function CustomTooltip({ active, payload, label, unit }: CustomTooltipProps) {
 
 export default function Home() {
   const [waterUnit, setWaterUnit] = useState<WaterUnit>("L");
+  const { user } = useAuth();
+  const { selectedDate, isToday } = useSelectedDate();
 
   const waterConsumed = convertWater(dailyWaterConsumedL, waterUnit);
   const waterGoal = convertWater(dailyWaterGoalL, waterUnit);
+
+  const userName =
+    (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ??
+    "there";
+
+  // Only "today" gets the time-of-day greeting; other days are stated plainly.
+  const dateLabel = selectedDate.toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-6">
@@ -115,7 +132,9 @@ export default function Home() {
           {getGreeting()}, {userName}
         </h1>
         <p className="text-muted-foreground mt-1">
-          Here&apos;s your fitness overview for today.
+          {isToday
+            ? "Here's your fitness overview for today."
+            : `Here's your fitness overview for ${dateLabel}.`}
         </p>
       </div>
 
