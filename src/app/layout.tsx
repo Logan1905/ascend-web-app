@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { siteConfig } from "@/config/site";
 import { AuthProvider } from "@/components/providers/auth-provider";
+import { DateProvider } from "@/components/providers/date-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { AppShell } from "@/components/shared/app-shell";
 import "./globals.css";
@@ -42,7 +43,9 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col">
         <ThemeProvider>
           <AuthProvider>
-            <AppShell>{children}</AppShell>
+            <DateProvider>
+              <AppShell>{children}</AppShell>
+            </DateProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>
